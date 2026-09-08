@@ -24,6 +24,12 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 |-----|-------|------|--------|
 | ADR-001 | Clinical Prescription Data Storage Design | [`adr/ADR-001-clinical-prescription-storage.md`](adr/ADR-001-clinical-prescription-storage.md) | Proposed |
 
+### Development Standards
+
+| Document | Path | Status |
+|----------|------|--------|
+| Coding and Code Review Standards | [`standards/coding-standards.md`](standards/coding-standards.md) | Active |
+
 ---
 
 ## Repository Structure
