@@ -208,11 +208,12 @@ Access control for clinical prescription data is governed by the baseline permis
 
 | Item | Question |
 |------|----------|
-| **Clinical fields** | Which specific fields are required on a prescription record? (e.g., sphere, cylinder, axis, near PD, far PD, lens type, frame type, add power, prism, clinical notes) |
+| **Clinical fields** | Which specific fields are required on a prescription record? (e.g., sphere, cylinder, axis, near PD, far PD, lens type, frame type, add power, prism, clinical notes). Clinical fields must NOT be invented or approved without stakeholder confirmation prior to FR-013 backend implementation. |
 | **Left/Right eye data** | Are fields recorded separately per eye, or as a single combined record? |
 | **Prescription validity / expiry** | Does a prescription have an expiry date that the system must track? |
 | **Amendment vs new record** | If an Optometrist corrects an error on an existing prescription, is that a new record or an amendment to the existing one? If amendment, how is the original preserved for audit? |
-| **Prescription linked to appointment** | Should a `Prescription` record reference the `Appointment` at which it was recorded? |
+| **Prescription linked to appointment** | Should a `Prescription` record reference the `Appointment` at which it was recorded? `appointmentId` is NOT a mandatory relationship and remains an optional open requirement until confirmed. |
+| **Prescription scan storage (Amazon S3)** | Digital prescription scans described in SDS Section 1.2.1/6.5 may reference an optional future S3 object key, but S3 upload logic and infrastructure modifications are explicitly out of scope for this documentation issue. |
 | **Customer-initiated prescription upload** | FR-002 mentions prescription history — does this include the ability for a customer to upload an externally issued prescription, or only Optometrist-recorded prescriptions? |
 
 **Implementation of FR-013 must not proceed until the clinical fields question is resolved.**  
