@@ -155,7 +155,7 @@ New prescription records are **always inserted** (never overwrite an existing re
 | SDS Section 1.2.1: support detailed clinical prescription histories | Dedicated collection with append-only insert pattern preserves the full history. |
 | SDS Section 6.2: RBAC — Optometrist creates/modifies, Customer views own data | Independent collection allows a focused authorization middleware that does not interfere with other customer data. |
 | SDS Section 6.3: audit trails, 7-year retention | `recordedAt`, `recordedBy`, `createdAt`, `updatedAt` fields provide record-level traceability (`isArchived` flag supports soft archival). Immutable audit logging or version history must be implemented separately if required by the SDS. |
-| SDS Section 6.3: sensitive data separated from general PII | Prescription collection is physically separate from `Customer` — reduces exposure surface. |
+| SDS Section 6.3: sensitive data separated from general PII | Prescription collection is logically separated from `Customer` — reduces exposure surface. |
 | AC5: history must not be overwritten | Insert-only pattern; no `PUT` that replaces the previous record. |
 
 The dedicated collection approach is the standard MongoDB pattern for one-to-many relationships where the "many" side (prescriptions) grows over time and requires independent access control and lifecycle management.
