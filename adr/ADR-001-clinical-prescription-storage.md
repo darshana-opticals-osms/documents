@@ -126,11 +126,11 @@ Prescription records are stored as an array field directly inside each `Customer
 
 **Disadvantages:**
 
-- The `Customer` document grows unboundedly as prescriptions accumulate over time, which violates MongoDB's recommended document-size discipline for high-frequency append patterns.
-- Authorization becomes more complex: the backend must retrieve the full `Customer` document before applying role-based field-level access control to the embedded prescription array.
-- Audit trails and archival are harder to manage independently; archiving a prescription means mutating the `Customer` document.
-- Clinical data (sensitive medical information) is co-located with general profile data (PII), creating a larger blast radius if a data exposure occurs.
-- Indexing on prescription fields (e.g., date range queries across all customers) is more expensive with embedded arrays.
+- Growth of the `Customer` document over time as prescription records accumulate.
+- Tight coupling of customer profile and clinical history lifecycles within a single document.
+- Increased complexity for enforcing independent role-based authorization on clinical prescription data.
+- Increased complexity for managing independent auditing, retention, and soft-archival policies.
+- Reduced flexibility for independent prescription querying, indexing, and reporting across customer records.
 
 ---
 
