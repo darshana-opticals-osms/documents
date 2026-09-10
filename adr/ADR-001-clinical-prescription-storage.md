@@ -178,16 +178,13 @@ The dedicated collection approach is the standard MongoDB pattern for one-to-man
 
 ### Access Control Summary
 
-| Role | Create | Modify | View |
-|------|--------|--------|------|
-| Optometrist / Medical Staff | ✅ | ✅ (own records) | ✅ |
-| Customer | ❌ | ❌ | ✅ (own records only) |
-| Admin | ❌ | ❌ | ✅ (audit only) |
-| Branch Manager | ❌ | ❌ | ❌ |
-| Inventory Manager | ❌ | ❌ | ❌ |
-| Management / Owner | ❌ | ❌ | ❌ |
+Access control for clinical prescription data is governed by the baseline permissions explicitly defined in the SDS (Section 6.2):
 
-> Authorization is enforced by backend RBAC middleware on all prescription endpoints. The frontend hiding controls is **not** a security control (copilot-instructions, Section 11).
+- **Authorized Optometrist / Medical Staff**: Can record and modify clinical prescription data (FR-013).
+- **Customers**: Can view their own prescription history (FR-002).
+- **Other Roles**: Detailed role permissions for all other system roles (e.g., Admin, Branch Manager, Management) must follow the authoritative RBAC ADR and are not defined within this storage design ADR.
+
+> **Security Control Rule:** Backend authorization middleware must be the primary security control enforcing role-based access on all prescription endpoints. Frontend UI visibility controls alone must not be treated as an authorization mechanism.
 
 ### Security and Privacy
 
