@@ -88,7 +88,7 @@ A separate MongoDB collection is created for prescription records. Each document
 - `recordedBy` reference satisfies AC4 (optometrist traceability).
 - The collection can be independently queried, indexed, and secured at the authorization layer.
 - Supports retention and archival policies independently of the `Customer` document (SDS Section 6.3).
-- Audit fields (`recordedAt`, `recordedBy`, `createdAt`, `updatedAt`) support the SDS requirement for immutable audit trails of clinical data changes.
+- Audit metadata fields (`recordedAt`, `recordedBy`, `createdAt`, `updatedAt`) provide record-level traceability. Note that these fields alone do not constitute an immutable audit trail; separate immutable logging or version history must be implemented if required by the SDS.
 - Independent authorization middleware can restrict collection access to approved roles without modifying the `Customer` model.
 
 **Disadvantages:**
@@ -154,7 +154,7 @@ New prescription records are **always inserted** (never overwrite an existing re
 | FR-013: Optometrist records clinical data | `POST /prescriptions` endpoint, RBAC-restricted to Optometrist role; `recordedBy` field captures the responsible staff member. |
 | SDS Section 1.2.1: support detailed clinical prescription histories | Dedicated collection with append-only insert pattern preserves the full history. |
 | SDS Section 6.2: RBAC — Optometrist creates/modifies, Customer views own data | Independent collection allows a focused authorization middleware that does not interfere with other customer data. |
-| SDS Section 6.3: audit trails, 7-year retention | `recordedAt`, `recordedBy`, `createdAt`, `updatedAt` fields support audit. `isArchived` flag supports lifecycle management without deletion. |
+| SDS Section 6.3: audit trails, 7-year retention | `recordedAt`, `recordedBy`, `createdAt`, `updatedAt` fields provide record-level traceability (`isArchived` flag supports soft archival). Immutable audit logging or version history must be implemented separately if required by the SDS. |
 | SDS Section 6.3: sensitive data separated from general PII | Prescription collection is physically separate from `Customer` — reduces exposure surface. |
 | AC5: history must not be overwritten | Insert-only pattern; no `PUT` that replaces the previous record. |
 
