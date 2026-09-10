@@ -6,9 +6,9 @@ Clinical Prescription Data Storage Design for OSMS
 
 ## 2. Status
 
-**Proposed** — Pending peer review and team approval.
+**Under Review (Revised)** — Post-merge corrections applied; pending team peer review and approval.
 
-> Once approved by the team, update this status to **Accepted** and record the approval date.
+> Once approved by the team after review of these corrections, update this status to **Accepted** and record the approval date.
 
 ---
 
@@ -240,6 +240,6 @@ The remaining questions should be clarified before or during the FR-013 implemen
 
 | Date | Reviewer | Role | Status | Notes |
 |------|----------|------|--------|-------|
-| — | — | — | Pending | — |
+| 2026-09-10 | Development Team | Peer Reviewers | Under Review | Post-merge correction of RBAC assumptions, audit-trail wording, Option B trade-offs, and field scope (AC1-AC10). |
 
 > Peer review is required before this ADR is moved to **Accepted** status and before the linked implementation issue (FR-013 backend) is started.
