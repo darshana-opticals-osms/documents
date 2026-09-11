@@ -6,9 +6,7 @@ Authoritative Role-Based Access Control (RBAC) Role Model for OSMS
 
 ## 2. Status
 
-**Proposed** — Pending peer review and team approval.
-
-> Once approved by the team, update this status to **Accepted** and record the approval date in the Review Record.
+**Accepted** — Approved through peer review on 2026-09-09.
 
 ---
 
@@ -411,7 +409,7 @@ This clarification does not prevent the canonical `SALES_ASSISTANT_CASHIER` role
 
 | Date | Reviewer | Role | Status | Notes |
 |---|---|---|---|---|
-| — | — | Team Member | Pending | — |
+| 2026-09-09 | thiruniimasha | Team Member | Approved | Peer review completed; no blocking issues. Reviewer suggested adding ADR-002 to the README documentation index. |
 | — | — | Supervisor | Pending | — |
 
-> At least one peer review is required before this ADR is considered approved. After approval, update the ADR status from **Proposed** to **Accepted**, record the approval details, and ensure the final SDS is updated to reflect the authoritative RBAC role model.
+> Peer review has been completed and the ADR is accepted. Supervisor review remains pending. The final SDS must be updated to reflect the authoritative RBAC role model as required by the project change-management process.
