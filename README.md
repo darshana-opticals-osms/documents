@@ -23,6 +23,7 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 | ADR | Title | Path | Status |
 |-----|-------|------|--------|
 | ADR-001 | Clinical Prescription Data Storage Design | [`adr/ADR-001-clinical-prescription-storage.md`](adr/ADR-001-clinical-prescription-storage.md) | Proposed |
+| ADR-002 | Authoritative RBAC Role Model | [`adr/ADR-002-rbac-role-model.md`](adr/ADR-002-rbac-role-model.md) | Accepted |
 
 ### Development Standards
 
@@ -34,14 +35,15 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 
 ## Repository Structure
 
-```
+```text
 documents/
 ├── srs/
 │   └── srs-v1.0.pdf          # Approved SRS v1.0
 ├── SDS/
 │   └── sds-v1.0.pdf          # Approved SDS v1.0
 ├── adr/
-│   └── ADR-001-clinical-prescription-storage.md
+│   ├── ADR-001-clinical-prescription-storage.md
+│   └── ADR-002-rbac-role-model.md
 └── README.md
 ```
 
