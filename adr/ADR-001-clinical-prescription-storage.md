@@ -6,9 +6,7 @@ Clinical Prescription Data Storage Design for OSMS
 
 ## 2. Status
 
-**Proposed** — Pending peer review and team approval.
-
-> Once approved by the team, update this status to **Accepted** and record the approval date.
+**Accepted** — Approved by team and stakeholders on 2026-09-12. Ready for FR-013 backend implementation.
 
 ---
 
@@ -64,7 +62,7 @@ Before FR-002 and FR-013 can be implemented, the team must agree on:
 
 A separate MongoDB collection is created for prescription records. Each document references the owning `Customer` and the recording `Staff` (Optometrist) by their respective IDs.
 
-**Illustrative document shape (confirmed fields only):**
+**Confirmed document shape (per stakeholder consultation):**
 
 ```json
 {
@@ -72,14 +70,38 @@ A separate MongoDB collection is created for prescription records. Each document
   "customerId": "<ObjectId — ref: Customer>",
   "recordedBy": "<ObjectId — ref: Staff (Optometrist)>",
   "recordedAt": "<ISODate>",
-  "notes": "<string — general clinical notes, if approved>",
+  "rightEye": {
+    "distance": {
+      "sph": "<number — Spherical>",
+      "cyl": "<number — Cylindrical>",
+      "axis": "<number — Axis in degrees>",
+      "va": "<string — Visual Acuity e.g. 6/12>"
+    },
+    "reading": {
+      "add": "<number — Add power>",
+      "nearVa": "<string — Near Visual Acuity e.g. N6>"
+    }
+  },
+  "leftEye": {
+    "distance": {
+      "sph": "<number — Spherical>",
+      "cyl": "<number — Cylindrical>",
+      "axis": "<number — Axis in degrees>",
+      "va": "<string — Visual Acuity e.g. 6/12->"
+    },
+    "reading": {
+      "add": "<number — Add power>",
+      "nearVa": "<string — Near Visual Acuity e.g. N6>"
+    }
+  },
+  "remarks": "<string — general clinical remarks/notes>",
   "isArchived": false,
   "createdAt": "<ISODate>",
   "updatedAt": "<ISODate>"
 }
 ```
 
-> ⚠️ **Open Requirement — see Section 8:** Specific clinical fields (sphere, cylinder, axis, PD, lens type, and detailed clinical notes) are not defined in the approved SRS or SDS. These fields must be confirmed by stakeholders before implementation. The schema above intentionally omits them pending that confirmation.
+> ✅ **Confirmed Clinical Schema — see Section 9:** Specific clinical fields (Right & Left Eye Distance/Reading: Sph, Cyl, Axis, VA, Add Power, Near VA, Remarks) are confirmed per team and stakeholder consultation.
 
 **Advantages:**
 
@@ -88,7 +110,7 @@ A separate MongoDB collection is created for prescription records. Each document
 - `recordedBy` reference satisfies AC4 (optometrist traceability).
 - The collection can be independently queried, indexed, and secured at the authorization layer.
 - Supports retention and archival policies independently of the `Customer` document (SDS Section 6.3).
-- Audit fields (`recordedAt`, `recordedBy`, `createdAt`, `updatedAt`) support the SDS requirement for immutable audit trails of clinical data changes.
+- Audit metadata fields (`recordedAt`, `recordedBy`, `createdAt`, `updatedAt`) provide record-level traceability. Note that these fields alone do not constitute an immutable audit trail; separate immutable logging or version history must be implemented if required by the SDS.
 - Independent authorization middleware can restrict collection access to approved roles without modifying the `Customer` model.
 
 **Disadvantages:**
@@ -126,11 +148,11 @@ Prescription records are stored as an array field directly inside each `Customer
 
 **Disadvantages:**
 
-- The `Customer` document grows unboundedly as prescriptions accumulate over time, which violates MongoDB's recommended document-size discipline for high-frequency append patterns.
-- Authorization becomes more complex: the backend must retrieve the full `Customer` document before applying role-based field-level access control to the embedded prescription array.
-- Audit trails and archival are harder to manage independently; archiving a prescription means mutating the `Customer` document.
-- Clinical data (sensitive medical information) is co-located with general profile data (PII), creating a larger blast radius if a data exposure occurs.
-- Indexing on prescription fields (e.g., date range queries across all customers) is more expensive with embedded arrays.
+- Growth of the `Customer` document over time as prescription records accumulate.
+- Tight coupling of customer profile and clinical history lifecycles within a single document.
+- Increased complexity for enforcing independent role-based authorization on clinical prescription data.
+- Increased complexity for managing independent auditing, retention, and soft-archival policies.
+- Reduced flexibility for independent prescription querying, indexing, and reporting across customer records.
 
 ---
 
@@ -154,8 +176,8 @@ New prescription records are **always inserted** (never overwrite an existing re
 | FR-013: Optometrist records clinical data | `POST /prescriptions` endpoint, RBAC-restricted to Optometrist role; `recordedBy` field captures the responsible staff member. |
 | SDS Section 1.2.1: support detailed clinical prescription histories | Dedicated collection with append-only insert pattern preserves the full history. |
 | SDS Section 6.2: RBAC — Optometrist creates/modifies, Customer views own data | Independent collection allows a focused authorization middleware that does not interfere with other customer data. |
-| SDS Section 6.3: audit trails, 7-year retention | `recordedAt`, `recordedBy`, `createdAt`, `updatedAt` fields support audit. `isArchived` flag supports lifecycle management without deletion. |
-| SDS Section 6.3: sensitive data separated from general PII | Prescription collection is physically separate from `Customer` — reduces exposure surface. |
+| SDS Section 6.3: audit trails, 7-year retention | `recordedAt`, `recordedBy`, `createdAt`, `updatedAt` fields provide record-level traceability (`isArchived` flag supports soft archival). Immutable audit logging or version history must be implemented separately if required by the SDS. |
+| SDS Section 6.3: sensitive data separated from general PII | Prescription collection is logically separated from `Customer` — reduces exposure surface. |
 | AC5: history must not be overwritten | Insert-only pattern; no `PUT` that replaces the previous record. |
 
 The dedicated collection approach is the standard MongoDB pattern for one-to-many relationships where the "many" side (prescriptions) grows over time and requires independent access control and lifecycle management.
@@ -178,16 +200,13 @@ The dedicated collection approach is the standard MongoDB pattern for one-to-man
 
 ### Access Control Summary
 
-| Role | Create | Modify | View |
-|------|--------|--------|------|
-| Optometrist / Medical Staff | ✅ | ✅ (own records) | ✅ |
-| Customer | ❌ | ❌ | ✅ (own records only) |
-| Admin | ❌ | ❌ | ✅ (audit only) |
-| Branch Manager | ❌ | ❌ | ❌ |
-| Inventory Manager | ❌ | ❌ | ❌ |
-| Management / Owner | ❌ | ❌ | ❌ |
+Access control for clinical prescription data is governed by the baseline permissions explicitly defined in the SDS (Section 6.2):
 
-> Authorization is enforced by backend RBAC middleware on all prescription endpoints. The frontend hiding controls is **not** a security control (copilot-instructions, Section 11).
+- **Authorized Optometrist / Medical Staff**: Can record and modify clinical prescription data (FR-013).
+- **Customers**: Can view their own prescription history (FR-002).
+- **Other Roles**: Detailed role permissions for all other system roles (e.g., Admin, Branch Manager, Management) must follow the authoritative RBAC ADR and are not defined within this storage design ADR.
+
+> **Security Control Rule:** Backend authorization middleware must be the primary security control enforcing role-based access on all prescription endpoints. Frontend UI visibility controls alone must not be treated as an authorization mechanism.
 
 ### Security and Privacy
 
@@ -205,21 +224,21 @@ The dedicated collection approach is the standard MongoDB pattern for one-to-man
 
 ---
 
-## 9. Open Requirements — Stakeholder Confirmation Required
+## 9. Confirmed Requirements & Clinical Specifications
 
-> ⚠️ The following items are **not defined** in the approved SRS or SDS. Per the copilot-instructions (Section 12 — Clinical prescription data), these fields must **not** be implemented without explicit stakeholder confirmation. They are recorded here so the implementation ticket is not blocked by an undocumented assumption.
+> ✅ The following requirements have been confirmed through team and stakeholder consultation based on standard optical clinical prescription specifications (Sethma Hospitals / OSMS standard format).
 
-| Item | Question |
-|------|----------|
-| **Clinical fields** | Which specific fields are required on a prescription record? (e.g., sphere, cylinder, axis, near PD, far PD, lens type, frame type, add power, prism, clinical notes) |
-| **Left/Right eye data** | Are fields recorded separately per eye, or as a single combined record? |
-| **Prescription validity / expiry** | Does a prescription have an expiry date that the system must track? |
-| **Amendment vs new record** | If an Optometrist corrects an error on an existing prescription, is that a new record or an amendment to the existing one? If amendment, how is the original preserved for audit? |
-| **Prescription linked to appointment** | Should a `Prescription` record reference the `Appointment` at which it was recorded? |
-| **Customer-initiated prescription upload** | FR-002 mentions prescription history — does this include the ability for a customer to upload an externally issued prescription, or only Optometrist-recorded prescriptions? |
+| Item | Confirmed Specification / Decision |
+|------|-----------------------------------|
+| **Clinical fields** | Confirmed per standard prescription card structure: Right Eye (`rightEye`) and Left Eye (`leftEye`) recorded with Distance parameters (`sph`, `cyl`, `axis`, `va`), Reading parameters (`add`, `nearVa`), and clinical `remarks`. |
+| **Left/Right eye data** | Confirmed to be recorded separately per eye under distinct `rightEye` and `leftEye` sub-documents. |
+| **Prescription validity / expiry** | Confirmed no expiration date tracking is required (`expiryDate` omitted). |
+| **Amendment vs new record** | Confirmed insert-only pattern. Correcting an error creates a new prescription document; existing records are preserved unchanged to guarantee full historical traceability (FR-002). |
+| **Prescription linked to appointment** | Confirmed no mandatory linkage to `Appointment`. Prescriptions reference `customerId` and `recordedBy` (`Staff`) only (`appointmentId` omitted). |
+| **Prescription scan storage (Amazon S3)** | Confirmed external prescriptions are not scanned or uploaded to S3. No S3 file upload logic or infrastructure integration required. |
+| **Customer-initiated prescription upload** | Confirmed prescription records are created exclusively by authorized Optometrists / Medical Staff (FR-013). Customers have view-only access to their prescription history (FR-002). |
 
-**Implementation of FR-013 must not proceed until the clinical fields question is resolved.**  
-The remaining questions should be clarified before or during the FR-013 implementation sprint.
+**With all clinical field specifications and architectural decisions confirmed, FR-013 backend model implementation can proceed.**
 
 ---
 
@@ -242,6 +261,5 @@ The remaining questions should be clarified before or during the FR-013 implemen
 
 | Date | Reviewer | Role | Status | Notes |
 |------|----------|------|--------|-------|
-| — | — | — | Pending | — |
-
-> Peer review is required before this ADR is moved to **Accepted** status and before the linked implementation issue (FR-013 backend) is started.
+| 2026-09-10 | Development Team | Peer Reviewers | Under Review | Post-merge correction of RBAC assumptions, audit-trail wording, Option B trade-offs, and field scope (AC1-AC10). |
+| 2026-09-12 | Development Team & Stakeholders | Peer Reviewers | Accepted | Finalized clinical field schema (Right/Left Eye Distance & Reading parameters), insert-only pattern, and stakeholder decisions. Approved for FR-013 backend implementation. |
