@@ -176,6 +176,15 @@ The current OrderItem model does not yet preserve sufficiently authoritative pro
 
 This is therefore recorded as an implementation/data-contract requirement for the Order/Checkout domain: the backend must derive eligible spend from authoritative Order/payment/item data, not from a frontend-supplied eligible amount or earned-points value.
 
+The future Order/Checkout domain must preserve authoritative information sufficient for the backend to distinguish:
+
+- merchandise/product value
+- excluded clinical eye-test / doctor-fee value
+
+This may later be implemented through an authoritative item/service classification, eligibility marker, or equivalent domain metadata, but this ADR does not prescribe an exact field name such as isLoyaltyEligible unless a dedicated Order/Checkout ADR or implementation requirement explicitly approves that contract.
+
+The important architectural requirement is that the backend can derive eligible spend from authoritative persisted Order/OrderItem/service data, rather than trusting a frontend-supplied eligibleAmount or points value.
+
 ### 6.5 Automatic loyalty behavior
 
 The source states that FR-010 requires loyalty points to be calculated and updated automatically based on customer purchase value.
@@ -306,6 +315,22 @@ This field is intended for fast customer-facing reads and efficient management o
 
 A dedicated loyalty event or transaction record should store the minimum required audit trail for each loyalty change.
 
+The backend implementation must use a centralized controlled set of loyalty event/transaction types rather than arbitrary free-form strings. The semantic categories are architectural and not intended to be invented independently by each service or domain component.
+
+The required semantic event categories currently include:
+
+- purchase earning
+- refund/reversal
+- redemption deduction
+
+These may conceptually correspond to backend-defined identifiers such as:
+
+- EARN_PURCHASE
+- REFUND_REVERSAL
+- REDEMPTION_DEDUCTION
+
+However, the exact identifier names are implementation-level details and are not frozen as a final enum in this ADR. The important architectural requirement is that the event types are centrally defined, controlled, and consistent across the loyalty domain.
+
 Proposed concepts:
 
 - customerId
@@ -320,6 +345,8 @@ Proposed concepts:
 This is a proposed event model for future design work.
 
 Exact schema details, indexing, and Mongoose-type decisions are implementation-level follow-up and are intentionally not locked in this ADR.
+
+No arbitrary manual-adjustment event is required because manual adjustment is prohibited by the clarified business rules.
 
 ## 10. Customer Ownership and Access
 
@@ -697,10 +724,11 @@ This ADR does not claim that ADR-003 or ADR-004 already exist in the merged repo
 | Date | Reviewer | Role | Status | Notes |
 |---|---|---|---|---|
 | 2026-10-04 | — | Team / Business Clarification | Completed | Business-rule clarification recorded; no formal approval claim made |
-| — | — | Peer Reviewer | Pending | Formal ADR peer review required before Accepted status |
+| 2026-10-04 | — | Peer Review | Completed | Peer review was completed; no blocker comments were raised. Two non-blocking implementation suggestions were received and incorporated as architectural clarifications only. |
+| — | — | Formal GitHub Review / Approval | Pending | GitHub review state remains COMMENTED rather than formal APPROVE; formal approval remains pending. |
 | — | — | Supervisor | Pending | Formal approval pending |
 
-No participant names or sign-off names are included beyond the business-rule clarification record. This ADR remains Proposed.
+No participant names or sign-off names are included beyond the recorded decision and review status. This ADR remains Proposed.
 
 ## 29. AC1–AC15 Traceability
 
