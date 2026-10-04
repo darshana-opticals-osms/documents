@@ -8,15 +8,15 @@ Loyalty Points Calculation and Persistence Model for OSMS
 
 **Proposed**
 
-This ADR does not yet carry Accepted status. Several required business rules remain unresolved and require stakeholder/team confirmation before the design may be finalized as an accepted implementation standard.
+This ADR remains in Proposed status. The loyalty business rules were clarified during the team meeting on 2026-10-04, but formal peer review and approval are still required before the ADR may become Accepted.
 
 This ADR intentionally does not claim:
 
-- stakeholder confirmation
+- final approval
 - reviewer approval
 - supervisor approval
-- approval date
-- final acceptance
+- accepted-date filing
+- implementation approval beyond the current design proposal
 
 ## 3. Context
 
@@ -29,6 +29,7 @@ The current project state shows the following relevant constraints:
 - The SDS documents the approval and monitoring responsibilities tied to management review.
 - The RBAC model is governed by ADR-002.
 - The current backend data model does not yet implement a loyalty balance/history model.
+- On 2026-10-04, the team clarified the unresolved loyalty business rules and recorded the final business decisions below.
 
 The design challenge is to define a loyalty model that can support:
 
@@ -109,23 +110,32 @@ without inventing unsupported business policy.
 
 ## 6. Confirmed Business Rules
 
-The following rules are source-confirmed and must be preserved exactly:
+The following rules were clarified during the team meeting on 2026-10-04 and are treated as the approved business decisions for this ADR while status remains Proposed.
 
-### 6.1 Source-confirmed earing rule
+### 6.1 Confirmed earning formula
 
-SRS Business Rule 10.3:
+The team confirmed the earning rule as:
 
-> "Loyalty points are earned at a rate of 1 point for every 100 LKR spent on frames and accessories; however, points are not accrued for clinical eye test fees."
+> earnedPoints = eligibleSpend / 100
 
-This means:
+This is a decimal-based accumulation rule. Loyalty points support decimal values and must be represented to 2 decimal places.
 
-- 1 loyalty point is earned for every LKR 100 spent
-- eligible spend is on frames and accessories
-- clinical eye-test fees do not earn points
+Examples:
 
-### 6.2 Source-confirmed redemption rule
+- LKR 100 eligible spend -> 1.00 point
+- LKR 250 eligible spend -> 2.50 points
+- LKR 320 eligible spend -> 3.20 points
 
-SRS Business Rule 10.3:
+Important precision:
+
+- The previous floor-only design is not used.
+- Points are not rounded down to integers.
+- A value with more than two decimal places must be bounded deterministically to two decimal places using a defined decimal-rounding convention at the business/data-contract level.
+- Binary floating-point arithmetic must not be treated as the authoritative financial calculation without explicit decimal-safe handling.
+
+### 6.2 Confirmed redemption rule
+
+SRS Business Rule 10.3 remains the source basis:
 
 > "Redemption of loyalty points is allowed only when the customer's total point balance exceeds 500 points."
 
@@ -134,27 +144,37 @@ Important precision:
 - the source says exceeds 500
 - this ADR does not change that to 500 or more
 
-### 6.3 Confirmed eligible purchase categories
+The team also confirmed the redemption conversion rule:
+
+- 10 loyalty points = LKR 1
+- equivalent: 1 point = LKR 0.10
+
+The backend is authoritative for any redemption monetary value calculation.
+
+### 6.3 Confirmed purchase eligibility
+
+The team clarified that the loyalty calculation applies to merchandise/product items purchased through an Order, while clinical eye-test / doctor examination fees do not earn points.
+
+This means the design must distinguish:
+
+- Product / merchandise value
+- Clinical service / eye-test fee value
 
 Confirmed eligible:
 
-- frames
-- accessories
+- merchandise/product items purchased through an Order
 
 Confirmed excluded:
 
-- clinical eye-test fees
+- clinical eye-test / doctor examination fees
 
-### 6.4 Confirmed non-eligible / unresolved categories
+The ADR must therefore preserve the original SRS exclusion for clinical eye-test fees and treat any future product-category decision as a separate implementation/data-contract matter when the Order domain has sufficient authoritative data.
 
-The approved source does not explicitly confirm the following categories as eligible:
+### 6.4 Product and category boundary requirement
 
-- contact lenses
-- prescription lenses
-- services
-- other future categories
+The current OrderItem model does not yet preserve sufficiently authoritative product/category/type information to distinguish all merchandise items from excluded clinical service lines.
 
-Those remain unresolved unless an approved source explicitly defines them.
+This is therefore recorded as an implementation/data-contract requirement for the Order/Checkout domain: the backend must derive eligible spend from authoritative Order/payment/item data, not from a frontend-supplied eligible amount or earned-points value.
 
 ### 6.5 Automatic loyalty behavior
 
@@ -162,20 +182,28 @@ The source states that FR-010 requires loyalty points to be calculated and updat
 
 This ADR therefore treats loyalty accumulation as an automatic backend business function, not a manual or client-driven value.
 
-### 6.6 Unresolved rule for non-multiples of LKR 100
+### 6.6 Confirmed non-eligible categories
 
-The SRS does not define how to handle partial LKR 100 blocks, including examples such as:
+The source does not assign explicit loyalty eligibility to categories such as:
 
-- LKR 50
-- LKR 150
-- LKR 250
-- LKR 10,050
+- contact lenses
+- prescription lenses
+- services
+- other future categories
 
-This is a required business decision and remains unresolved.
+Those remain outside the confirmed scope unless a separate, approved domain decision states otherwise.
 
-Recommendation only — not approved:
+### 6.7 Team decision summary
 
-The system could choose a consistent integer policy such as floor-based earning for partial blocks, but this is not source-approved and must not be presented as a confirmed business rule.
+The team clarified the following business rules on 2026-10-04:
+
+- decimal reward values are allowed and must be stored/returned to 2 decimal places
+- loyalty points are confirmed only after a successful Payment and an Order in the approved COMPLETED state
+- a valid full refund reverses the previously earned loyalty points from that refunded eligible purchase
+- a valid partial refund reverses points proportionally to the refunded eligible amount
+- post-payment customer self-cancellation is not available; loyalty impact is decided by the refund/cancellation outcome
+- arbitrary staff manual point adjustments are prohibited
+- the tiered-loyalty program is out of current implementation scope
 
 ## 7. Considered Persistence Options
 
@@ -341,51 +369,52 @@ Any manual-adjustment capability requires separate explicit approval.
 
 ## 13. Manual Adjustment Policy
 
-The authoritative SRS/SDS/ADR sources do not currently approve arbitrary manual loyalty adjustments.
+The team clarified on 2026-10-04 that staff must not have arbitrary manual loyalty-point adjustment capability.
 
-This ADR therefore records:
+Therefore:
 
-Manual loyalty adjustments are NOT approved for implementation by this ADR until an explicit requirement and stakeholder decision defines:
-
-- whether they are allowed
-- which role may perform them
-- what evidence/reason must be captured
-- what audit requirements apply
+- no normal staff operation may manually add arbitrary points
+- no normal staff operation may manually subtract arbitrary points
+- no normal staff operation may manually overwrite the balance
+- no normal staff operation may bypass the automatic calculation
 
 This ADR distinguishes clearly between:
 
 - automatic earning
-- automatic reversal or compensating transaction
-- redemption deduction
+- automatic redemption
+- approved refund reversal
+- compensating reversal history
 
 and:
 
 - arbitrary staff manual adjustment
 
-The latter is not approved by current source material, and the design must not collapse the categories.
+The latter is prohibited and is not approved by this ADR or by the clarified business rules.
 
 ## 14. Award Trigger
 
-The source material references loyalty activities and the operational flow around point-of-sale behavior, but it does not clearly define the authoritative persistence event that creates a confirmed award.
+The team clarified the award trigger on 2026-10-04.
 
-Possible unresolved alternatives include:
+Confirmed rule:
 
-- point of sale
-- payment completion
-- order completion
-- another approved event
+Loyalty points are confirmed only after both of the following are true:
 
-This ADR does not finalize a trigger as a confirmed business rule.
+1. Payment has succeeded
+2. The related Order reaches the approved COMPLETED state
 
-Recommendation only — stakeholder/team confirmation required:
+This means:
 
-A recommended operational design is to award points only after a payment reaches the authoritative successful state and the sale/order is confirmed.
+- successful payment alone does not immediately produce confirmed loyalty points
+- order creation alone does not produce loyalty points
+- failed payment does not produce confirmed points
+- cancelled or unsuccessful payment does not produce confirmed points
+- an Order not yet in the approved COMPLETED state does not produce confirmed points
 
-This recommendation should not be treated as an approved source rule until stakeholder review confirms it.
+The implementation must therefore be retry-safe and idempotent because the qualifying event may be observed more than once.
 
 ## 15. Failed Payment Behaviour
 
-The ADR must satisfy the intent of AC9:
+The ADR satisfies the intent of AC9:
 
 A failed or non-qualifying payment must not create a confirmed loyalty award.
 
@@ -395,28 +424,50 @@ The system must not award points for:
 
 - failed transactions
 - cancelled transactions
+- unsuccessful payment states
 
-This does not resolve later refund/cancellation behavior after a previously awarded point event; that is a separate unresolved question.
+If a previously awarded loyalty event is later affected by a refund or cancellation outcome, that is addressed under the refund-reversal rule below.
 
 ## 16. Refund / Cancellation Handling
 
-The SRS defines a 7-day return policy for eyewear frames, but it does not define the loyalty effect after a return, cancellation, or partial refund.
+The clarified team rule for refunds and cancellations is as follows.
 
-The following remain unresolved:
+### 16.1 Full refund
 
-- full refund treatment
-- cancellation after award
-- partial refund treatment
+If a purchase that previously earned loyalty points receives a valid full refund, the loyalty points earned from that refunded eligible purchase must be reversed.
 
-Reasonable approaches include:
+The reversal must be recorded as an auditable loyalty-history event. The original earning history is retained; the reversal is appended as a subsequent compensating event.
 
-A. retain points
-B. directly reverse existing award
-C. append a compensating negative loyalty transaction
+### 16.2 Partial refund
 
-Recommendation only — not approved:
+If a valid partial refund is performed, the loyalty points corresponding to the refunded eligible amount must be reversed proportionally.
 
-Option C is the most auditable because it preserves the original award history and records a compensating reversal as a separate event. This is a design recommendation, not a source-confirmed business rule.
+Example conceptually:
+
+- original eligible purchase: LKR 1,000 -> 10.00 points
+- eligible refunded amount: LKR 300
+- reversal: 3.00 points
+
+The reversal must reflect only the refunded eligible portion and not the non-refunded portion.
+
+### 16.3 Post-payment cancellation workflow
+
+After payment, a Customer does not receive an online self-service ability to cancel the Order directly.
+
+If a post-payment cancellation or refund situation arises:
+
+- the Customer must contact staff
+- the request follows the applicable business/refund policy
+- some items may not qualify for refund
+- only an approved refund/cancellation outcome affects loyalty points
+
+If an item or amount is not refunded, no loyalty reversal is triggered merely because the Customer requested cancellation.
+
+### 16.4 Recommendation on reversal mechanism
+
+Recommendation only — not a final business-approval claim:
+
+A compensating negative loyalty transaction is the preferred technical representation because it preserves audit history while reflecting the reversal. This is a recommendation only and does not replace the team-approved business rule.
 
 ## 17. Duplicate-Award Protection
 
@@ -521,13 +572,17 @@ The confirmed rule is:
 
 > Redemption of loyalty points is allowed only when the customer's total point balance exceeds 500 points.
 
+The team also confirmed the redemption conversion:
+
+- 10 loyalty points = LKR 1
+- 1 point = LKR 0.10
+
 The following remain out of scope unless explicitly approved:
 
-- point-to-LKR conversion
-- redemption percentage
 - expiry policy
 - redemption cap
 - tier-specific discounts or offers
+- additional promotional redemption rules
 
 If future redemption implementation deducts points, the proposed Option C model supports auditable negative transactions by storing the deduction as a transaction/event with an opposite signed delta.
 
@@ -535,15 +590,11 @@ If future redemption implementation deducts points, the proposed Option C model 
 
 The SRS high-level customer-retention section mentions a tiered loyalty program with discounts and exclusive offers.
 
-However, the approved source material does not define:
-
-- tier names
-- tier thresholds
-- tier benefits
+However, the team clarified that the tiered loyalty program is out of current DDP-038 / Sprint 2 implementation scope and will remain future consideration.
 
 This ADR therefore does not invent values such as Bronze, Silver, Gold, or any threshold schedules.
 
-Tier details are outside the source-confirmed scope of ADR-005 and remain future work requiring clarification.
+The broader SRS mentions a tiered concept, but detailed tier implementation is deliberately deferred from the current scope.
 
 ## 23. Reporting Impact
 
@@ -595,22 +646,22 @@ The proposed model must include:
 - balance and history must remain transactionally consistent
 - unresolved business rules still block final implementation acceptance
 
-## 26. Unresolved Decisions Requiring Stakeholder Confirmation
+## 26. Team-Clarified Business Decisions
 
-The following questions remain open and must be answered by the team before the ADR can become Accepted:
+The team clarified the following business decisions on 2026-10-04 and these are now treated as resolved for this ADR:
 
-1. How are non-LKR-100 multiples rounded?
-2. What exact business event awards points?
-3. Are contact lenses, prescription lenses, or other categories eligible?
-4. What happens to points after a full refund?
-5. What happens to points after cancellation following an award?
-6. How should partial refunds affect points?
-7. Are manual adjustments ever allowed, and if so under what authority?
-8. What is the approved point-to-currency redemption conversion?
-9. Are loyalty tiers part of the current phase, and if so what are their rules?
-10. What authoritative order/product data will preserve item eligibility for backend calculation?
+1. Decimal earning values are used, with 2 decimal places retained for the business value.
+2. The award trigger is: successful Payment AND Order in the approved COMPLETED state.
+3. Product/merchandise value is eligible; clinical eye-test fees are excluded.
+4. A valid full refund reverses previously earned points from the refunded eligible purchase.
+5. A valid partial refund reverses the corresponding eligible portion proportionally.
+6. Post-payment Customer cancellation is not a self-service path; loyalty impact follows the refund/cancellation outcome.
+7. Arbitrary staff manual adjustment is prohibited.
+8. Redemption conversion is 10 points = LKR 1, equivalent to 1 point = LKR 0.10.
+9. Tiered loyalty is deferred out of current scope.
+10. The backend must derive eligible spend from authoritative Order/payment/item data and must not trust frontend-supplied values.
 
-These questions are not answered in the approved source material and must remain clearly visible in the ADR.
+Any remaining open items are implementation-contract dependencies rather than unresolved business rules. For example, the exact data contract or product-type association in the checkout/order workflow must be defined in the relevant domain task, but the business rule itself is resolved.
 
 ## 27. SRS / SDS / ADR References
 
@@ -645,23 +696,24 @@ This ADR does not claim that ADR-003 or ADR-004 already exist in the merged repo
 
 | Date | Reviewer | Role | Status | Notes |
 |---|---|---|---|---|
-| — | — | Team / Stakeholder | Pending | Business-rule clarification required |
-| — | — | Peer Reviewer | Pending | — |
+| 2026-10-04 | — | Team / Business Clarification | Completed | Business-rule clarification recorded; no formal approval claim made |
+| — | — | Peer Reviewer | Pending | Formal ADR peer review required before Accepted status |
+| — | — | Supervisor | Pending | Formal approval pending |
 
-No reviewer names, approval dates, or supervisor approvals are included because this ADR remains Proposed and is not yet accepted.
+No participant names or sign-off names are included beyond the business-rule clarification record. This ADR remains Proposed.
 
 ## 29. AC1–AC15 Traceability
 
-- AC1: PARTIAL — earning rate confirmed; rounding unresolved
-- AC2: PENDING — award trigger requires confirmation
-- AC3: PROPOSED — Option C selected for review
+- AC1: SATISFIED — exact earning formula, 2-decimal rule, and merchandise-vs-clinical eligibility are clarified
+- AC2: SATISFIED — successful Payment AND Order COMPLETED is the confirmed award trigger
+- AC3: PROPOSED — Option C selected as the recommended architecture pending peer review
 - AC4: SATISFIED IN PROPOSED DESIGN
 - AC5: SATISFIED IN PROPOSED DESIGN
 - AC6: SATISFIED IN PROPOSED DESIGN
-- AC7: PENDING / NOT APPROVED
+- AC7: SATISFIED — arbitrary manual adjustment is prohibited
 - AC8: SATISFIED IN PROPOSED DESIGN
-- AC9: SATISFIED IN PROPOSED DESIGN
-- AC10: PENDING — refund/cancellation business rule
+- AC9: SATISFIED — failed or non-successful Payment / non-completed Order do not create confirmed points
+- AC10: SATISFIED — full and partial refund behavior are clarified; post-payment cancellation workflow is defined
 - AC11: SATISFIED IN PROPOSED DESIGN
 - AC12: SATISFIED IN PROPOSED DESIGN
 - AC13: SATISFIED IN PROPOSED DESIGN
@@ -670,11 +722,11 @@ No reviewer names, approval dates, or supervisor approvals are included because 
 
 ## 30. Consequence of Current Draft State
 
-This ADR is ready for stakeholder review as a Proposed design.
+This ADR is ready for formal peer review as a Proposed design.
 
-It is not ready to become Accepted until the unresolved business decisions listed above are resolved.
+It is not yet ready to become Accepted. The business rules have been clarified, but the normal ADR review and approval process still must complete before Accepted status is valid.
 
-This issue remains incomplete until those stakeholder decisions are resolved and the ADR is accepted through the normal review process.
+This issue remains documentation-only and is not complete until the required review and approval process is completed.
 
 ## 31. Final Draft Status
 
