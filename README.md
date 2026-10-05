@@ -24,6 +24,7 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 |-----|-------|------|--------|
 | ADR-001 | Clinical Prescription Data Storage Design | [`adr/ADR-001-clinical-prescription-storage.md`](adr/ADR-001-clinical-prescription-storage.md) | Proposed |
 | ADR-002 | Authoritative RBAC Role Model | [`adr/ADR-002-rbac-role-model.md`](adr/ADR-002-rbac-role-model.md) | Accepted |
+| ADR-003 | Shopping Cart Persistence and Checkout Boundary | [`adr/ADR-003-shopping-cart-checkout-boundary.md`](adr/ADR-003-shopping-cart-checkout-boundary.md) | Proposed |
 
 ### Development Standards
 
@@ -43,7 +44,8 @@ documents/
 │   └── sds-v1.0.pdf          # Approved SDS v1.0
 ├── adr/
 │   ├── ADR-001-clinical-prescription-storage.md
-│   └── ADR-002-rbac-role-model.md
+│   ├── ADR-002-rbac-role-model.md
+│   └── ADR-003-shopping-cart-checkout-boundary.md
 └── README.md
 ```
 
