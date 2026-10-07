@@ -274,12 +274,28 @@ Cart-changing operations must be synchronized with the backend.
 
 The backend-persisted Cart represents the persistent state associated with the authenticated Customer.
 
-The cart should contain only the information necessary to represent the customer's intended purchase before checkout, such as:
+### Minimum Persisted Cart Contract
 
-- product/inventory identifier,
-- requested quantity.
+The persisted Cart must contain only the minimum information required to represent the Customer's intended purchase before checkout.
 
-Authoritative price, stock availability, and final totals must not rely on stale frontend values.
+At minimum, the persistence contract must include:
+
+- Customer ownership derived from the authenticated JWT,
+- the referenced product/inventory item,
+- the Customer's requested quantity.
+
+The client must not control the authoritative Customer identity.
+
+The persisted Cart must not treat the following as authoritative checkout values:
+
+- product price,
+- current stock availability,
+- calculated line totals,
+- calculated order total.
+
+These values must be retrieved, validated, or recalculated from authoritative backend/database data during checkout.
+
+Detailed Mongoose schema design, indexes, and implementation-specific field names remain the responsibility of the dedicated Cart/backend implementation issue.
 
 After a successful backend cart mutation, the frontend should update itself using backend-confirmed cart data.
 
@@ -322,6 +338,28 @@ When checkout begins, the backend must:
 
 The frontend must not create or treat an Order as confirmed before the backend confirms successful persistence.
 
+### Checkout Consistency / Atomicity Boundary
+
+Checkout persistence must behave as one consistent all-or-nothing business operation.
+
+The required checkout changes include, where applicable:
+
+- creation of the `Order`,
+- creation of all related `OrderItem` records,
+- inventory changes required to confirm the Order,
+- removal of the temporary Cart after successful checkout.
+
+The system must not expose a confirmed Order if only part of the required checkout persistence has succeeded.
+
+If any required checkout persistence step fails, the backend must use an appropriate transaction, rollback, or equivalent compensation mechanism so that:
+
+- no partially confirmed Order remains,
+- Order and OrderItem data remain consistent,
+- inventory does not remain partially updated,
+- the Cart is not silently lost.
+
+The exact MongoDB transaction or compensation implementation is outside this ADR and must be defined in the dedicated Sprint 2 checkout/backend implementation issue.
+
 ---
 
 ## 14. Inventory Interaction Boundary
@@ -338,7 +376,31 @@ Detailed inventory-decrement and stock-synchronization behaviour remains the res
 
 ---
 
-## 15. Failure Behaviour
+## 15. Payment Boundary
+
+The approved SDS includes Payment functionality, but this ADR is limited to shopping-cart persistence and the transition from temporary Cart data to Order and OrderItem data.
+
+This ADR does not define the required sequencing between:
+
+- payment authorization or payment completion,
+- Order persistence,
+- Order confirmation.
+
+The approved requirements reviewed for DDP-036 do not provide enough information to select that business rule safely.
+
+Therefore, payment sequencing must be confirmed through the appropriate stakeholder/design decision and implemented through the dedicated payment and checkout issues.
+
+Until that decision is confirmed, implementation must not independently assume that:
+
+- an Order is confirmed before payment,
+- payment must always complete before Order creation,
+- or Order creation itself proves successful payment.
+
+The atomic checkout boundary defined by this ADR applies to the cart-to-order persistence responsibilities defined here. Payment-specific consistency requirements must follow the separately approved payment architecture.
+
+---
+
+## 16. Failure Behaviour
 
 Checkout may fail because of conditions such as:
 
@@ -351,16 +413,18 @@ Checkout may fail because of conditions such as:
 
 If checkout fails:
 
-- no invalid confirmed Order should be produced,
+- no invalid or partially confirmed Order should be produced,
+- partial Order, OrderItem, and inventory changes must not remain as a successful checkout state,
 - the frontend must receive a clear failure response,
 - the Cart must not be silently deleted,
-- the previously persisted Cart should remain available unless an explicitly valid cart update is required.
+- the previously persisted Cart should remain available unless an explicitly valid cart update is required,
+- rollback, transaction, or equivalent compensation behaviour must preserve the consistency boundary defined in Section 13.
 
 The frontend must not display a successful checkout until the backend confirms successful Order creation.
 
 ---
 
-## 16. Post-Checkout Behaviour
+## 17. Post-Checkout Behaviour
 
 After successful Order and OrderItem creation:
 
@@ -375,7 +439,7 @@ If checkout fails, the Cart remains available so the Customer can correct the is
 
 ---
 
-## 17. SRS and SDS References
+## 18. SRS and SDS References
 
 ### SRS
 
@@ -398,7 +462,7 @@ If checkout fails, the Cart remains available so the Customer can correct the is
 
 ---
 
-## 18. Implementation Boundary
+## 19. Implementation Boundary
 
 This ADR defines architecture only.
 
@@ -412,11 +476,13 @@ DDP-036 must not implement:
 - inventory decrement logic,
 - payment integration.
 
+Payment sequencing and payment lifecycle rules are also outside the decision scope of DDP-036 and require the separately approved payment architecture or stakeholder clarification.
+
 Those changes must be completed in their dedicated Sprint 2 implementation issues after this ADR is Accepted.
 
 ---
 
-## 19. Review Record
+## 20. Review Record
 
 | Date | Reviewer / Group | Result | Notes |
 |---|---|---|---|
@@ -426,7 +492,7 @@ Those changes must be completed in their dedicated Sprint 2 implementation issue
 
 ---
 
-## 20. Decision Summary
+## 21. Decision Summary
 
 OSMS will implement a **hybrid authenticated shopping cart**.
 
@@ -439,3 +505,6 @@ OSMS will implement a **hybrid authenticated shopping cart**.
 - Successful checkout creates `Order` and `OrderItem` records.
 - Cart is deleted only after successful checkout.
 - Failed checkout preserves the Cart.
+- Persisted Cart ownership comes from the authenticated JWT and Cart items persist only the required product/inventory reference and requested quantity.
+- Checkout persistence must behave as an all-or-nothing operation; partial Order, OrderItem, inventory, or Cart state must not be exposed as successful checkout.
+- Payment sequencing is not decided by this ADR and requires the separately approved payment architecture / stakeholder clarification.
