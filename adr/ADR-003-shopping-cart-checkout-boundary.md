@@ -6,8 +6,7 @@ Shopping Cart Persistence and Checkout Boundary for OSMS
 
 ## 2. Status
 
-**Proposed** — Team architecture decision agreed on 2026-10-05. Pending formal peer review and approval.
-
+**Accepted** — Approved through peer review on 2026-10-07.
 ---
 
 ## 3. Context
@@ -487,7 +486,7 @@ Those changes must be completed in their dedicated Sprint 2 implementation issue
 | Date | Reviewer / Group | Result | Notes |
 |---|---|---|---|
 | 2026-10-05 | Development Team | Agreed | Hybrid authenticated cart architecture selected. Only authenticated CUSTOMER users may use cart functionality. Empty carts are not persisted. |
-| Pending | Peer Reviewer | Pending | Formal pull-request review required before ADR status changes to Accepted. |
+| 2026-10-07 | thiruniimasha | Approved | Peer review completed. Previous checkout atomicity blocker and review suggestions were addressed; no blocking issues remain. |
 | — | — | Supervisor | Pending | — |
 
 ---

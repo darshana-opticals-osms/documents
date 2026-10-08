@@ -20,11 +20,15 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 
 ### Architectural Decision Records (ADRs)
 
+### Architectural Decision Records (ADRs)
+
 | ADR | Title | Path | Status |
 |-----|-------|------|--------|
 | ADR-001 | Clinical Prescription Data Storage Design | [`adr/ADR-001-clinical-prescription-storage.md`](adr/ADR-001-clinical-prescription-storage.md) | Proposed |
 | ADR-002 | Authoritative RBAC Role Model | [`adr/ADR-002-rbac-role-model.md`](adr/ADR-002-rbac-role-model.md) | Accepted |
-| ADR-003 | Shopping Cart Persistence and Checkout Boundary | [`adr/ADR-003-shopping-cart-checkout-boundary.md`](adr/ADR-003-shopping-cart-checkout-boundary.md) | Proposed |
+| ADR-003 | Shopping Cart Persistence and Checkout Boundary | [`adr/ADR-003-shopping-cart-checkout-boundary.md`](adr/ADR-003-shopping-cart-checkout-boundary.md) | Accepted |
+| ADR-005 | Loyalty Points Calculation and Persistence Model | [`adr/ADR-005-loyalty-points-model.md`](adr/ADR-005-loyalty-points-model.md) | Accepted |
+| ADR-010 | AI Chatbot Architecture and Knowledge Strategy | [`adr/ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md`](adr/ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md) | Accepted |
 
 ### Development Standards
 
@@ -46,6 +50,8 @@ documents/
 │   ├── ADR-001-clinical-prescription-storage.md
 │   ├── ADR-002-rbac-role-model.md
 │   └── ADR-003-shopping-cart-checkout-boundary.md
+│   ├── ADR-005-loyalty-points-model.md
+│   └── ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md
 └── README.md
 ```
 
