@@ -114,7 +114,7 @@ The team evaluated four architectural options for FR-011:
 | **Knowledge Source** | MongoDB OSMS `Knowledge Area` collection | Authoritative single source of truth managed internally by the Shop Branch Manager. |
 | **Retrieval Strategy** | Text / Keyword Search + Category Filter over `Knowledge Area` | High precision, zero extra vector database overhead, fully adequate for OSMS domain scale (~50-200 articles). |
 | **Vector Embeddings** | **Not Required** (Explicitly rejected for baseline scope) | Avoids unnecessary infrastructure cost and maintenance (YAGNI). |
-| **Conversation Model** | Transient active session memory; **automatic deletion on logout** | Ensures customer privacy; chat logs are not retained across logins. |
+| **Conversation Model** | Stateless Backend + Client-side `sessionStorage`; **purged on logout/tab close** | Maximum customer privacy; zero database message log overhead; conversation state held in browser `sessionStorage` during active session only. |
 | **Authentication** | Authenticated Customer Role (`CUSTOMER`) required | Enforces ADR-002 RBAC; prevents anonymous abuse and isolates customer data. Chatbot available only after login. |
 | **Data Boundary** | Retail/store FAQ & customer own order-status metadata only | **Strictly excludes** clinical prescription data (ADR-001), payments, passwords, and internal credentials. |
 | **Frontend Rendering** | Plain text rendering | Plain text display in frontend widget; prevents HTML execution or script injection risks. |
@@ -127,7 +127,7 @@ The team evaluated four architectural options for FR-011:
 To adhere to the DRY and dependency inversion principles, all interactions with external LLM APIs must pass through an abstract adapter interface.
 
 ```
-[ Frontend Chatbot Widget ] 
+[ Frontend Chatbot Widget ] ◄──► [ Browser sessionStorage (Active Session History) ]
          │ (HTTP REST / JSON - Plain Text Output)
          ▼
 [ Chatbot Controller ] ──> [ Chatbot Service ] ──> [ Knowledge Retrieval Service ]
@@ -182,34 +182,22 @@ Baseline SDS fields (`Article_ID`, `Category`, `Content_Title`) are extended wit
 }
 ```
 
-#### 9.3.2 `Chatbot` Schema Extension & Session Lifecycle
-Baseline SDS fields (`Chat_ID`, `Customer_Id`, `Inquiry_Type`, `Response_Status`) are extended to support active in-session multi-turn interaction:
+#### 9.3.2 Stateless Backend & Client `sessionStorage` Architecture
+To ensure complete customer privacy and avoid unnecessary database storage overhead, chat messages are managed using a **Stateless Backend + Client `sessionStorage` Architecture**:
 
-```javascript
-// MongoDB Collection / Session State: chatbots
-{
-  _id: ObjectId,             // Primary key (maps to Chat_ID)
-  chatId: String,            // Unique session ID (UUID / CUID)
-  customerId: ObjectId,      // Reference to authenticated Customer (ADR-002)
-  inquiryType: String,       // Category enum (e.g., "GENERAL_INQUIRY", "STORE_INFO")
-  responseStatus: String,    // Lifecycle enum (e.g., "ANSWERED", "UNSUPPORTED")
-  messages: [                // Active session message logs
-    {
-      sender: String,        // "CUSTOMER" | "CHATBOT" | "SYSTEM"
-      text: String,          // Sanitized message content (Plain Text)
-      timestamp: Date,
-      referencedArticleIds: [String] // Traceability metadata
-    }
-  ],
-  createdAt: Date,
-  updatedAt: Date
-}
-```
+1. **Stateless Backend Processing**:
+   - The backend Chatbot service processes incoming queries statelessly (`POST /api/v1/chatbot/query`).
+   - The backend performs Knowledge Area retrieval, formats the grounded prompt, invokes Google Gemini API via `IChatbotAdapter`, and returns the plain-text answer to the frontend.
+   - The backend **does not store full conversation message logs in MongoDB**.
 
-**Session Lifecycle & Deletion Policy**:
-- Chat history is maintained ONLY for the duration of the active authenticated session.
-- **Immediate Cleanup on Logout**: When a customer logs out, their active chatbot session and message history are automatically purged/deleted.
-- **No Cross-Session Persistence**: Customers cannot view previous chat logs upon logging back in.
+2. **Client-Side `sessionStorage` Management**:
+   - Active in-session chat messages are stored in browser **`sessionStorage`** (e.g., `sessionStorage.getItem('osms_chat_history')`).
+   - `sessionStorage` maintains the active conversation thread while the customer browses OSMS within the active browser session.
+
+3. **Immediate Purge on Logout & Tab Close**:
+   - **Logout Action**: When the customer clicks Logout, the frontend authentication handler executes `sessionStorage.removeItem('osms_chat_history')`, instantly purging all active chat history.
+   - **Browser Tab Close**: Closing the browser tab/window automatically clears `sessionStorage`.
+   - **No Historical Retention**: Customers cannot retrieve past chat logs upon re-logging in.
 
 ### 9.4 Inquiry Type & Response Status Semantics (AC11, AC12)
 
@@ -305,8 +293,9 @@ CUSTOMER QUESTION:
 - Logs MUST NOT contain full user message text, provider secrets, auth tokens, or PII.
 
 ### 11.6 Data Retention & Logout Deletion Policy (AC34)
-- **No Long-Term Chat Logging**: The Chatbot does not retain customer conversation history across logins.
-- **Automatic Logout Deletion**: Active chat session logs are automatically deleted upon customer logout or session expiration. Re-logging in starts a fresh chatbot session.
+- **Zero Database Message Persistence**: Full customer conversation message logs are NOT persisted in the MongoDB database.
+- **Client-Side `sessionStorage` Lifecycle**: Active chat history exists only in browser `sessionStorage` during an active authenticated session.
+- **Automatic Deletion on Logout & Window Close**: Executing customer logout runs `sessionStorage.removeItem('osms_chat_history')`, instantly purging all local chat messages. Closing the browser tab/window also automatically clears `sessionStorage`. Customers cannot view past chat history upon logging back in.
 
 ### 11.7 Knowledge Area Content Management & Ownership (AC36, AC37)
 - **Content Ownership**: Creating, updating, and deactivating `Knowledge Area` articles in the system is owned by the Shop **Branch Manager** (`BRANCH_MANAGER` role).
