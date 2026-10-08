@@ -6,17 +6,9 @@ Loyalty Points Calculation and Persistence Model for OSMS
 
 ## 2. Status
 
-**Proposed**
+**Accepted**
 
-This ADR remains in Proposed status. The loyalty business rules were clarified during the team meeting on 2026-10-04, but formal peer review and approval are still required before the ADR may become Accepted.
-
-This ADR intentionally does not claim:
-
-- final approval
-- reviewer approval
-- supervisor approval
-- accepted-date filing
-- implementation approval beyond the current design proposal
+Approved through peer review and supervisor sign-off on 2026-10-05.
 
 ## 3. Context
 
@@ -723,39 +715,36 @@ This ADR does not claim that ADR-003 or ADR-004 already exist in the merged repo
 
 | Date | Reviewer | Role | Status | Notes |
 |---|---|---|---|---|
-| 2026-10-04 | — | Team / Business Clarification | Completed | Business-rule clarification recorded; no formal approval claim made |
-| 2026-10-04 | — | Peer Review | Completed | Peer review was completed; no blocker comments were raised. Two non-blocking implementation suggestions were received and incorporated as architectural clarifications only. |
-| — | — | Formal GitHub Review / Approval | Pending | GitHub review state remains COMMENTED rather than formal APPROVE; formal approval remains pending. |
-| — | — | Supervisor | Pending | Formal approval pending |
+| 2026-10-04 | — | Team / Business Clarification | Completed | Business-rule clarification recorded |
+| 2026-10-04 | thiruniimasha | Peer Reviewer | Approved | Peer review completed; non-blocking clarifications incorporated. |
+| 2026-10-05 | Project Supervisor | Supervisor | Approved | Formal supervisor review completed and approved. |
 
-No participant names or sign-off names are included beyond the recorded decision and review status. This ADR remains Proposed.
+Peer review and supervisor approval have been completed and this ADR is Accepted.
 
 ## 29. AC1–AC15 Traceability
 
 - AC1: SATISFIED — exact earning formula, 2-decimal rule, and merchandise-vs-clinical eligibility are clarified
 - AC2: SATISFIED — successful Payment AND Order COMPLETED is the confirmed award trigger
-- AC3: PROPOSED — Option C selected as the recommended architecture pending peer review
-- AC4: SATISFIED IN PROPOSED DESIGN
-- AC5: SATISFIED IN PROPOSED DESIGN
-- AC6: SATISFIED IN PROPOSED DESIGN
+- AC3: SATISFIED — Option C selected as the authoritative architecture
+- AC4: SATISFIED
+- AC5: SATISFIED
+- AC6: SATISFIED
 - AC7: SATISFIED — arbitrary manual adjustment is prohibited
-- AC8: SATISFIED IN PROPOSED DESIGN
+- AC8: SATISFIED
 - AC9: SATISFIED — failed or non-successful Payment / non-completed Order do not create confirmed points
 - AC10: SATISFIED — full and partial refund behavior are clarified; post-payment cancellation workflow is defined
-- AC11: SATISFIED IN PROPOSED DESIGN
-- AC12: SATISFIED IN PROPOSED DESIGN
-- AC13: SATISFIED IN PROPOSED DESIGN
-- AC14: SATISFIED IN PROPOSED DESIGN
+- AC11: SATISFIED
+- AC12: SATISFIED
+- AC13: SATISFIED
+- AC14: SATISFIED
 - AC15: SATISFIED — documentation only
 
-## 30. Consequence of Current Draft State
+## 30. Consequence of Accepted Status
 
-This ADR is ready for formal peer review as a Proposed design.
+This ADR is Accepted as the authoritative Loyalty Points Calculation and Persistence Model for OSMS.
 
-It is not yet ready to become Accepted. The business rules have been clarified, but the normal ADR review and approval process still must complete before Accepted status is valid.
+It provides the approved design baseline for backend implementation (DDP-058 / loyalty service).
 
-This issue remains documentation-only and is not complete until the required review and approval process is completed.
+## 31. Final Status
 
-## 31. Final Draft Status
-
-This ADR is intentionally a documentation-only proposal and does not alter any application code, backend models, APIs, frontend behavior, database schema, tests, or infrastructure configuration.
+This ADR is an authoritative documentation artifact and does not alter any application code, backend models, APIs, frontend behavior, database schema, tests, or infrastructure configuration directly in this issue.
