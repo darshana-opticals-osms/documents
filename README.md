@@ -20,8 +20,6 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 
 ### Architectural Decision Records (ADRs)
 
-### Architectural Decision Records (ADRs)
-
 | ADR | Title | Path | Status |
 |-----|-------|------|--------|
 | ADR-001 | Clinical Prescription Data Storage Design | [`adr/ADR-001-clinical-prescription-storage.md`](adr/ADR-001-clinical-prescription-storage.md) | Proposed |
@@ -49,7 +47,7 @@ documents/
 ├── adr/
 │   ├── ADR-001-clinical-prescription-storage.md
 │   ├── ADR-002-rbac-role-model.md
-│   └── ADR-003-shopping-cart-checkout-boundary.md
+│   ├── ADR-003-shopping-cart-checkout-boundary.md
 │   ├── ADR-005-loyalty-points-model.md
 │   └── ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md
 └── README.md

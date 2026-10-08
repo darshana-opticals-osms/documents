@@ -7,6 +7,7 @@ Shopping Cart Persistence and Checkout Boundary for OSMS
 ## 2. Status
 
 **Accepted** — Approved through peer review on 2026-10-07.
+
 ---
 
 ## 3. Context
