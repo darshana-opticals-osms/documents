@@ -332,9 +332,20 @@ The corresponding active alert must therefore:
 - stop generating repeated reminders,
 - be marked as resolved/inactive.
 
-The system does not require a separate detailed alert-history system for Sprint 2.
+The system does not require a separate detailed alert-history interface or historical analytics for Sprint 2.
 
-The same persisted alert may be updated according to the backend implementation strategy rather than creating uncontrolled historical duplicates.
+Once an active reorder alert is resolved, that alert record must remain resolved and must not be reactivated.
+
+If the same Inventory record later becomes low stock again after the previous alert was resolved, the system must create a new active reorder alert for the new low-stock occurrence.
+
+Duplicate prevention therefore applies while an active alert already exists for the Inventory record.
+
+For a newly created low-stock alert after a previous resolved alert:
+
+- a new created timestamp must be recorded,
+- the resolved timestamp must initially be empty,
+- the last reminder timestamp must initially be empty,
+- the previous resolved alert and its timestamps must remain unchanged.
 
 ---
 
@@ -485,6 +496,19 @@ Changing the threshold changes Inventory business behaviour and therefore must:
 - reject unauthorized updates.
 
 The frontend must not be treated as the authorization boundary.
+
+A successful change to the global reorder threshold must trigger authoritative re-evaluation of all existing Inventory records using the same centralized reorder-evaluation logic defined by this ADR.
+
+For each Inventory record after the new threshold is persisted:
+
+- if `quantity <= new threshold` and no active alert exists, create a new active reorder alert,
+- if `quantity <= new threshold` and an active alert already exists, update that active alert with the current quantity and threshold,
+- if `quantity > new threshold` and an active alert exists, resolve that alert and stop reminders,
+- if `quantity > new threshold` and no active alert exists, no alert action is required.
+
+Threshold-change reconciliation must not be implemented as separate duplicated low-stock logic.
+
+The backend must use the same centralized reorder-evaluation mechanism used by normal Inventory quantity updates and checkout/order stock deductions.
 
 ---
 
@@ -660,3 +684,5 @@ OSMS will use the following authoritative reorder-alert model:
 - Email and SMS are outside Sprint 2 scope.
 - Manual Inventory updates and checkout/order deductions must use the same centralized reorder-evaluation logic.
 - No automatic procurement or supplier-ordering workflow is introduced.
+- A successful global threshold change triggers authoritative re-evaluation of all existing Inventory records using the centralized reorder-evaluation logic.
+- Resolved alerts remain resolved; if the same Inventory record later becomes low stock again, a new active reorder alert is created for that new low-stock occurrence.
