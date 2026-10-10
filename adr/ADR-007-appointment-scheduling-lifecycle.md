@@ -6,7 +6,7 @@ Appointment Scheduling, Availability, and Lifecycle Rules for OSMS
 
 ## 2. Status
 
-**Proposed** — Team business rules have been confirmed. Pending formal peer review and approval.
+**Accepted** — Approved through formal peer review in PR #30.
 
 ---
 
@@ -871,7 +871,7 @@ Those changes belong to their respective implementation issues.
 | Date | Reviewer / Group | Result | Notes |
 |---|---|---|---|
 | 2026-10-10 | Development Team | Agreed | Confirmed Gampaha-only appointment service, staff-created capacity-based doctor sessions, customer-selected Optometrist, 24-hour booking rule, cancellation before session start, Sales Assistant/Cashier operational management, Branch Manager read-only visibility, manual communication, and Asia/Colombo timezone. |
-| Pending | Peer Reviewer | Pending | Formal pull-request review required before ADR status changes to Accepted. |
+| 2026-10-10 | thiruniimasha | Approved | Reviewed the updated ADR; previously raised Doctor Session authority, appointment ordering/cancellation behaviour, and ADR-002 authorization precedence issues were resolved. No blocking issues remain. |
 | — | — | Supervisor | Pending | Documentation alignment required for changed reminder and authorization decisions. |
 
 ---
