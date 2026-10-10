@@ -225,7 +225,14 @@ Conceptually:
 `Appointment`
 - Customer
 - Doctor session
+- Position / order within the session
 - Status
+
+The Doctor Session is the authoritative source for the assigned Optometrist and the session date/time.
+
+An individual Appointment must not independently define a different Optometrist or appointment time from its associated Doctor Session.
+
+The Appointment represents the customer's booking within that authoritative session.
 
 This separation avoids duplicating session-level data across every customer booking.
 
@@ -255,6 +262,25 @@ The session is full when:
 A customer must not be allowed to create a booking that causes the confirmed booking count to exceed the configured capacity.
 
 Cancelled bookings do not consume active session capacity.
+
+### Appointment Ordering / Position Rule
+
+Confirmed customer appointments within a Doctor Session must have an active booking position.
+
+Positions are assigned according to successful booking order.
+
+Conceptually:
+
+- first successfully confirmed booking → position 1,
+- second successfully confirmed booking → position 2,
+- third successfully confirmed booking → position 3,
+- and so on.
+
+A customer does not select an individual time within the session. The position represents the customer's order within that shared Doctor Session.
+
+The backend is authoritative for assigning and maintaining appointment position.
+
+Concurrent bookings must not receive the same active position.
 
 ---
 
@@ -373,6 +399,30 @@ One customer cancels:
 `Confirmed bookings = 9`
 
 The session therefore has one available place again.
+
+
+Cancellation also removes the cancelled appointment from the active appointment order for that session.
+
+When an active appointment is cancelled, later active appointments must shift forward so that the active positions remain continuous.
+
+Example:
+
+Before cancellation:
+
+- Customer A → position 1
+- Customer B → position 2
+- Customer C → position 3
+- Customer D → position 4
+
+If Customer B cancels:
+
+- Customer A → position 1
+- Customer C → position 2
+- Customer D → position 3
+
+The cancelled Appointment record remains preserved with status `CANCELLED`, but it no longer occupies an active session position or session capacity.
+
+The backend must maintain this ordering consistently.
 
 ---
 
@@ -566,21 +616,31 @@ The `OPTOMETRIST` role remains the authoritative identity used to determine whic
 
 ---
 
-## 27. ADR-002 Authorization Impact
+## 27. ADR-002 Authorization Impact and Precedence
 
 ADR-002 currently identifies `OPTOMETRIST` as the primary appointment-management role and identifies `BRANCH_MANAGER` for approved reminder operations.
 
-The confirmed operational workflow for DDP-045 differs from that earlier general mapping.
+The confirmed operational workflow for DDP-045 intentionally changes that earlier appointment-specific mapping.
 
-This ADR therefore defines a controlled, more specific authorization decision for Sprint 2 appointment scheduling:
+This ADR therefore defines the more specific authorization model for Sprint 2 appointment scheduling:
 
 - `SALES_ASSISTANT_CASHIER` → operational session and appointment management,
-- `CUSTOMER` → own booking/view/cancellation functionality,
-- `BRANCH_MANAGER` → read-only Gampaha appointment visibility,
-- `OPTOMETRIST` → assigned clinical provider identity; no direct appointment-management workflow required.
+- `CUSTOMER` → own booking, viewing, and eligible cancellation functionality,
+- `BRANCH_MANAGER` → read-only Gampaha appointment/session visibility,
+- `OPTOMETRIST` → assigned clinical provider identity; no direct appointment-management workflow required,
 - `SYSTEM_ADMIN` → no normal appointment/session visibility or operational appointment-management permission.
 
-This change must be reflected in the project's final authorization documentation/SDS through the normal change-management process.
+Once ADR-007 becomes `Accepted`, the appointment-specific authorization rules defined by ADR-007 supersede any conflicting appointment-management or reminder-operation mapping currently documented in ADR-002.
+
+ADR-002 remains authoritative for:
+
+- canonical role definitions,
+- role naming,
+- permissions outside the appointment-specific scope of ADR-007.
+
+ADR-002 must later be updated through the normal change-management process so that the project does not retain conflicting appointment authorization rules.
+
+The affected SRS and SDS authorization documentation must also be updated through the normal change-management process to reflect the accepted ADR-007 appointment workflow.
 
 ---
 
@@ -649,14 +709,33 @@ These concerns are outside DDP-045.
 
 The existing Appointment model must be preserved where possible.
 
-Existing concepts remain valid:
+Existing concepts remain valid where they do not conflict with the session-based architecture:
 
 - Customer relationship,
-- Staff / Optometrist relationship,
 - appointment status,
 - timestamps.
 
 However, the confirmed session-based design requires a persisted doctor-session concept.
+
+Under the session-based design, the Doctor Session becomes the authoritative source for:
+
+- assigned Optometrist,
+- session date,
+- session start time,
+- session end time.
+
+Therefore, the existing `Appointment.staffId` and `Appointment.dateTime` fields must not remain independent authoritative scheduling values.
+
+The backend implementation must prevent those fields from conflicting with the associated Doctor Session.
+
+If `Appointment.staffId` or `Appointment.dateTime` are temporarily retained for backward compatibility or migration reasons, they must:
+
+- be derived from the associated Doctor Session by authoritative backend logic,
+- not be independently supplied or modified by the customer,
+- remain consistent with the Doctor Session,
+- not become a second source of scheduling truth.
+
+The long-term Appointment relationship should primarily reference the Doctor Session for provider and timing information.
 
 The backend implementation may therefore require a controlled extension such as:
 
@@ -686,6 +765,10 @@ Backend validation must enforce at minimum:
 - customer may access only their own appointments,
 - unauthorized roles cannot manage sessions,
 - appointment times are interpreted consistently using `Asia/Colombo`.
+- Doctor Session is authoritative for Optometrist and session timing,
+- Appointment provider/time data must not conflict with its associated Doctor Session,
+- active appointment positions within a session must remain unique and continuous,
+- cancellation must remove the booking from the active order and shift later active positions forward,
 
 Frontend validation may improve usability but must not replace backend validation.
 
@@ -822,3 +905,9 @@ OSMS will use the following authoritative appointment scheduling model:
 - Automated reminders are not part of the approved current workflow; staff communication is manual.
 - No appointment payment is required.
 - A persisted doctor-session concept is required as a controlled extension to the current Appointment architecture.
+- Doctor Session is the authoritative source for the assigned Optometrist and session timing.
+- Customer appointments receive sequential positions according to successful booking order.
+- Cancelling an appointment releases capacity and shifts later active appointments forward in position.
+- Existing `Appointment.staffId` and `Appointment.dateTime` must not remain independent scheduling sources that can conflict with Doctor Session data.
+- Once ADR-007 is Accepted, its appointment-specific authorization mapping supersedes conflicting appointment-management/reminder mappings in ADR-002.
+- ADR-002 and affected SRS/SDS authorization documentation must be aligned through the normal change-management process.
