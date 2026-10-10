@@ -26,6 +26,7 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 | ADR-002 | Authoritative RBAC Role Model | [`adr/ADR-002-rbac-role-model.md`](adr/ADR-002-rbac-role-model.md) | Accepted |
 | ADR-003 | Shopping Cart Persistence and Checkout Boundary | [`adr/ADR-003-shopping-cart-checkout-boundary.md`](adr/ADR-003-shopping-cart-checkout-boundary.md) | Accepted |
 | ADR-005 | Loyalty Points Calculation and Persistence Model | [`adr/ADR-005-loyalty-points-model.md`](adr/ADR-005-loyalty-points-model.md) | Accepted |
+| ADR-006 | Inventory Reorder-Alert Rules and Persistence Model | [`adr/ADR-006-inventory-reorder-alert-model.md`](adr/ADR-006-inventory-reorder-alert-model.md) | Accepted |
 | ADR-010 | AI Chatbot Architecture and Knowledge Strategy | [`adr/ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md`](adr/ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md) | Accepted |
 
 ### Development Standards
@@ -49,6 +50,7 @@ documents/
 │   ├── ADR-002-rbac-role-model.md
 │   ├── ADR-003-shopping-cart-checkout-boundary.md
 │   ├── ADR-005-loyalty-points-model.md
+│   ├── ADR-006-inventory-reorder-alert-model.md
 │   └── ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md
 └── README.md
 ```
