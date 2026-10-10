@@ -6,7 +6,7 @@ Inventory Reorder-Alert Rules and Persistence Model for OSMS
 
 ## 2. Status
 
-**Proposed** — Team business rules have been agreed. Pending formal peer review and approval.
+**Accepted** — Approved through formal peer review in PR #29.
 
 ---
 
@@ -658,7 +658,7 @@ Those changes belong to their dedicated Sprint 2 implementation issues.
 | Date | Reviewer / Group | Result | Notes |
 |---|---|---|---|
 | 2026-10-09 | Development Team | Agreed | Global threshold 5, `quantity <= 5` low-stock rule, persisted alerts, immediate evaluation, 3-hour in-app reminders during working hours, Inventory Manager threshold ownership. |
-| Pending | Peer Reviewer | Pending | Formal pull-request review required before ADR status changes to Accepted. |
+| 2026-10-10 | thiruniimasha | Approved | Reviewed the updated ADR; previously raised threshold-reconciliation and alert-lifecycle blockers were resolved. No blocking issues remain. |
 | — | — | Supervisor | Pending | — |
 
 ---
