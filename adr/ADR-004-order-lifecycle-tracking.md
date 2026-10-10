@@ -499,7 +499,7 @@ Dependent implementation must not independently introduce alternative statuses, 
 | ---------- | ------------------------ | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-10-09 | Development Team         | Proposed               | Initial ADR prepared for review under DDP-037 / Issue #14. `PICKED_UP` included to distinguish external-party collection from final Customer receipt. |
 | 2026-10-10 | Peer Reviewer            | Reviewed               | Requested authorized staff status-update access and automated Customer cancellation notification with refund-contact guidance; feedback incorporated.                                                                                                                                                     |
-| —          | Supervisor / Stakeholder | Pending where required | —                                                                                                                                                     |
+| 2026-10-10        | Supervisor / Stakeholder | Accepted | OK to Proceed                                                                                                                                                    |
 ---
 ## 27. Decision Summary
 The accepted OSMS Order-tracking lifecycle is:
