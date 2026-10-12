@@ -26,15 +26,13 @@ The current controlled appointment statuses are:
 - `CONFIRMED`
 - `CANCELLED`
 
-The current system also defines the canonical roles:
+The current system also defines the canonical roles per ADR-002:
 
 - `CUSTOMER`
 - `SYSTEM_ADMIN`
-- `INVENTORY_MANAGER`
 - `BRANCH_MANAGER`
 - `OPTOMETRIST`
-- `MANAGEMENT`
-- `SALES_ASSISTANT_CASHIER`
+- `BRANCH_ASSISTANT`
 
 The approved SDS requires appointment bookings to be made at least 24 hours in advance.
 
@@ -446,7 +444,7 @@ This avoids introducing a separate customer-side rescheduling lifecycle.
 
 ## 18. Staff Session Rescheduling
 
-Authorized `SALES_ASSISTANT_CASHIER` staff may change or reschedule a doctor session where required.
+Authorized `BRANCH_ASSISTANT` staff may change or reschedule a doctor session where required.
 
 Any changed session must still satisfy:
 
@@ -458,9 +456,9 @@ Any changed session must still satisfy:
 
 When a doctor session is rescheduled, existing customer bookings remain associated with that session and follow the updated session time.
 
-The `SALES_ASSISTANT_CASHIER` must manually contact affected customers and inform them about the changed session.
+The `BRANCH_ASSISTANT` must manually contact affected customers and inform them about the changed session.
 
-If an affected customer cannot attend the new session time, the `SALES_ASSISTANT_CASHIER` may make the required appointment adjustment using another valid available session or cancel the booking where necessary.
+If an affected customer cannot attend the new session time, the `BRANCH_ASSISTANT` may make the required appointment adjustment using another valid available session or cancel the booking where necessary.
 
 Any replacement session must still satisfy the approved availability, Optometrist, capacity, branch, and scheduling rules.
 
@@ -567,9 +565,9 @@ Customers do not receive staff appointment-management permissions.
 
 The confirmed operational appointment-management role is:
 
-`SALES_ASSISTANT_CASHIER`
+`BRANCH_ASSISTANT`
 
-For the Gampaha Main Branch appointment workflow, the authorized Sales Assistant / Cashier may:
+For the Gampaha Main Branch appointment workflow, the authorized Branch Assistant may:
 
 - create doctor sessions,
 - view doctor sessions,
@@ -596,7 +594,7 @@ Read-only access does not automatically allow the Branch Manager to:
 - change session capacity,
 - reschedule sessions.
 
-Operational appointment management remains assigned to `SALES_ASSISTANT_CASHIER`.
+Operational appointment management remains assigned to `BRANCH_ASSISTANT`.
 
 `SYSTEM_ADMIN` does not receive normal appointment or doctor-session visibility or operational appointment-management permissions.
 
@@ -624,7 +622,7 @@ The confirmed operational workflow for DDP-045 intentionally changes that earlie
 
 This ADR therefore defines the more specific authorization model for Sprint 2 appointment scheduling:
 
-- `SALES_ASSISTANT_CASHIER` → operational session and appointment management,
+- `BRANCH_ASSISTANT` → operational session and appointment management,
 - `CUSTOMER` → own booking, viewing, and eligible cancellation functionality,
 - `BRANCH_MANAGER` → read-only Gampaha appointment/session visibility,
 - `OPTOMETRIST` → assigned clinical provider identity; no direct appointment-management workflow required,
@@ -872,6 +870,7 @@ Those changes belong to their respective implementation issues.
 |---|---|---|---|
 | 2026-10-10 | Development Team | Agreed | Confirmed Gampaha-only appointment service, staff-created capacity-based doctor sessions, customer-selected Optometrist, 24-hour booking rule, cancellation before session start, Sales Assistant/Cashier operational management, Branch Manager read-only visibility, manual communication, and Asia/Colombo timezone. |
 | 2026-10-10 | thiruniimasha | Approved | Reviewed the updated ADR; previously raised Doctor Session authority, appointment ordering/cancellation behaviour, and ADR-002 authorization precedence issues were resolved. No blocking issues remain. |
+| 2026-10-12 | Development Team | Approved | Aligned roles with ADR-002: updated operational appointment management to `BRANCH_ASSISTANT`, retired `SALES_ASSISTANT_CASHIER`, `MANAGEMENT`, and `INVENTORY_MANAGER`. |
 | — | — | Supervisor | Pending | Documentation alignment required for changed reminder and authorization decisions. |
 
 ---
@@ -881,7 +880,7 @@ Those changes belong to their respective implementation issues.
 OSMS will use the following authoritative appointment scheduling model:
 
 - Appointment/channeling functionality is available only at the Gampaha Main Branch.
-- Authorized `SALES_ASSISTANT_CASHIER` staff create and manage doctor sessions.
+- Authorized `BRANCH_ASSISTANT` staff create and manage doctor sessions.
 - A doctor session has an Optometrist, date, start time, end time, and patient capacity.
 - Customers choose their preferred available Optometrist/session.
 - Only canonical `OPTOMETRIST` Staff records may be assigned as doctors.

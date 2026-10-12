@@ -12,12 +12,11 @@ Authoritative Role-Based Access Control (RBAC) Role Model for OSMS
 
 ## 3. Context
 
-The Optical Shop Management System (OSMS) uses Role-Based Access Control (RBAC) to control access to customer, staff, inventory, clinical, management, and administrative functionality.
+The Optical Shop Management System (OSMS) uses Role-Based Access Control (RBAC) to control access to customer, clinical, branch operational, branch managerial, and administrative functionality.
 
-The approved SRS and SDS both define role-related requirements. However, the role sets are not fully consistent.
+The approved SRS and SDS both defined role-related requirements. Originally:
 
-The SRS identifies the following relevant system stakeholders:
-
+The SRS identified the following system stakeholders:
 - System Administrator
 - Branch Manager
 - Optometrist / Medical Staff
@@ -26,8 +25,7 @@ The SRS identifies the following relevant system stakeholders:
 - Customer
 - Darshana Optical Management
 
-The SDS Section 6.2 defines the following RBAC authorization roles:
-
+The SDS Section 6.2 originally defined six RBAC authorization roles:
 - System Administrator
 - Inventory Manager
 - Branch Manager
@@ -35,24 +33,21 @@ The SDS Section 6.2 defines the following RBAC authorization roles:
 - Management / Owner
 - Customer
 
-The SDS therefore does **not** define `Sales Assistant / Cashier` as a separate authorization role even though it is explicitly identified as an internal stakeholder in the SRS.
+To eliminate overlapping responsibilities, simplify authorization governance, and align with the real-world operational structure of Darshana Opticals, the project retired `MANAGEMENT`, `INVENTORY_MANAGER`, and `SALES_ASSISTANT_CASHIER`. Their responsibilities have been reassigned:
+- Inventory management, stock alerts, reorder thresholds, business oversight, and reporting are consolidated under `BRANCH_MANAGER`.
+- Operational front-desk, counter assistance, and order lifecycle duties are assigned to the dedicated `BRANCH_ASSISTANT` role.
 
-The SRS describes the Sales Assistant / Cashier as being involved in daily sales transactions, customer inquiries, and point-of-sale loyalty activities.
-
-A consistent role model is required before authentication, authorization, frontend protected routes, development seed data, and role-based automated tests are finalized.
+This establishes an authoritative 5-role model across the system.
 
 ---
 
 ## 4. Problem
 
-The project currently contains two different interpretations of the OSMS role model.
+Previously, having separate `MANAGEMENT`, `INVENTORY_MANAGER`, and `SALES_ASSISTANT_CASHIER` roles introduced unnecessary architectural complexity, role fragmentation, and divergence between specifications and operational needs:
+- `INVENTORY_MANAGER` and `MANAGEMENT` responsibilities overlapped significantly with the Branch Manager's operational and oversight scope.
+- `SALES_ASSISTANT_CASHIER` had no dedicated functional requirements in the SRS and was absent from the SDS authorization matrix.
 
-The main ambiguity is:
-
-> **Sales Assistant / Cashier exists in the approved SRS stakeholder model but does not exist as a separate role in the SDS RBAC model.**
-
-If this difference is not resolved centrally, individual developers may independently define different role values in:
-
+Without a consolidated and authoritative canonical role set, individual developers risked defining conflicting role values in:
 - MongoDB user/staff schemas
 - JWT authentication
 - Backend RBAC middleware
@@ -61,9 +56,7 @@ If this difference is not resolved centrally, individual developers may independ
 - Development seed data
 - Automated authorization tests
 
-This could result in inconsistent authorization behaviour and security defects.
-
-The project therefore requires one authoritative list of canonical roles and one consistent interpretation of their responsibilities.
+The project therefore requires one authoritative list of five canonical roles and clear ownership of system responsibilities.
 
 ---
 
@@ -165,17 +158,21 @@ The system would implement only the six roles currently defined by the SDS.
 
 ## 8. Decision
 
-**Selected: Option A — Create a dedicated Sales Assistant / Cashier RBAC role.**
+**Selected: Consolidated 5-Role RBAC Model with `BRANCH_ASSISTANT` and Consolidated `BRANCH_MANAGER` Responsibilities.**
 
-The authoritative OSMS RBAC model will contain seven application roles.
+The authoritative OSMS RBAC model will contain five application roles:
+1. `SYSTEM_ADMIN`
+2. `BRANCH_MANAGER`
+3. `OPTOMETRIST`
+4. `BRANCH_ASSISTANT`
+5. `CUSTOMER`
 
-This ADR documents the addition of the Sales Assistant / Cashier role to the SDS authorization model.
-
-The role is retained because it is explicitly defined as an internal stakeholder in the SRS and represents responsibilities that are different from those of Branch Manager and Management.
-
-The role must follow the principle of least privilege.
-
-The addition of this role does **not** automatically introduce new functional requirements. Any Sales Assistant functionality that is not already supported by the approved SRS must be clarified and approved before implementation.
+Key decisions and reassignments:
+- `INVENTORY_MANAGER` and `MANAGEMENT` roles are retired from canonical authorization.
+  - Stock management, inventory adjustments, and reorder alert threshold configuration are assigned to `BRANCH_MANAGER`.
+  - Payment/business oversight, sales reports, and inventory reporting are consolidated under `BRANCH_MANAGER`.
+- `SALES_ASSISTANT_CASHIER` is replaced by the canonical role `BRANCH_ASSISTANT`, representing frontline operational staff at the branch (handling customer operational inquiries, sales assistance, order lifecycle progression, and operational appointment scheduling coordination).
+- Principle of least privilege is strictly enforced: `BRANCH_ASSISTANT` does not inherit managerial override, product catalog maintenance, or administrative configuration rights.
 
 ---
 
@@ -186,11 +183,9 @@ The following values are the authoritative programmatic role names for OSMS:
 | Business Role | Canonical Programmatic Value |
 |---|---|
 | System Administrator | `SYSTEM_ADMIN` |
-| Inventory Manager | `INVENTORY_MANAGER` |
 | Branch Manager | `BRANCH_MANAGER` |
 | Optometrist / Medical Staff | `OPTOMETRIST` |
-| Management / Owner | `MANAGEMENT` |
-| Sales Assistant / Cashier | `SALES_ASSISTANT_CASHIER` |
+| Branch Assistant | `BRANCH_ASSISTANT` |
 | Customer | `CUSTOMER` |
 
 These values must be used consistently by:
@@ -204,9 +199,9 @@ These values must be used consistently by:
 - Frontend protected routes
 - Frontend role-based navigation
 
-Alternative strings such as `admin`, `Admin`, `manager`, `cashier`, or `doctor` must not be independently introduced as authorization-role values.
+Alternative strings such as `admin`, `Admin`, `manager`, `cashier`, `doctor`, or retired legacy roles (`INVENTORY_MANAGER`, `MANAGEMENT`, `SALES_ASSISTANT_CASHIER`) must not be independently introduced as authorization-role values.
 
-Human-readable labels displayed in the user interface may use friendly names such as "System Administrator" or "Sales Assistant / Cashier", while authorization logic must use the canonical values defined above.
+Human-readable labels displayed in the user interface may use friendly names such as "System Administrator", "Branch Manager", or "Branch Assistant", while authorization logic must use the canonical values defined above.
 
 ---
 
@@ -219,27 +214,23 @@ The following mapping defines the main ownership of protected OSMS functional ar
 | User and account administration | `SYSTEM_ADMIN` | Privileged accounts must not be created through unrestricted public registration |
 | Customer profile and customer-owned functions | `CUSTOMER` | Customers may access only their own protected personal data |
 | Product/catalog maintenance | `BRANCH_MANAGER` | Other roles may receive read access only where allowed by the SDS or public catalog design |
-| Inventory management | `INVENTORY_MANAGER` | Handles approved stock-management operations. Inventory adjustments and manual price changes requiring managerial override are restricted to `BRANCH_MANAGER` or `SYSTEM_ADMIN` as defined by the SRS business rules |
-| Inventory/report viewing | `BRANCH_MANAGER`, `MANAGEMENT` where permitted | Read-only access must not imply inventory modification rights |
-| Appointment management | `OPTOMETRIST`, with `BRANCH_MANAGER` responsible for approved reminder operations | Customers may use the booking functionality but do not receive staff management permissions |
+| Inventory management & reorder alert thresholds | `BRANCH_MANAGER` | Handles stock-management operations, inventory adjustments, and threshold configurations previously assigned to `INVENTORY_MANAGER` |
+| Inventory/report viewing & business oversight | `BRANCH_MANAGER` | Payment/business oversight and sales/inventory reporting previously assigned to `MANAGEMENT` are consolidated under `BRANCH_MANAGER` |
+| Appointment management & doctor sessions | `BRANCH_ASSISTANT`, with `BRANCH_MANAGER` operational oversight | Staff appointment coordination and doctor session management per ADR-007; customers use self-service booking |
 | Clinical prescription recording | `OPTOMETRIST` | Customers may view their own approved prescription history but cannot create clinical records |
-| Payment/business oversight | `MANAGEMENT` | Management access must not automatically grant System Administrator privileges |
-| Sales and inventory reporting | `MANAGEMENT` | Other roles receive only the read access explicitly allowed by the approved design |
-| Operational sales-assistance duties | `SALES_ASSISTANT_CASHIER` | Limited to approved sales-assistance responsibilities; no automatic admin, management, clinical, or inventory-modification access |
+| Branch operational & sales-assistance duties | `BRANCH_ASSISTANT` | Frontline sales assistance, order status progression, and customer counter support; no administrative, clinical, or catalog/pricing override access |
 | Shopping, checkout, chatbot, and order tracking | `CUSTOMER` | Customer access remains scoped to customer-facing functionality |
 
-### Sales Assistant / Cashier Limitation
+### Branch Assistant Limitation
 
-The SRS describes the Sales Assistant / Cashier as handling daily sales transactions, customer inquiries, and point-of-sale loyalty activities.
-
-However, the current Functional Requirements Register does not assign a separate FR directly to the Sales Assistant / Cashier.
+The `BRANCH_ASSISTANT` role handles daily branch operational duties, customer inquiries, order processing, and frontline assistance.
 
 Therefore:
 
-- The role is included in the RBAC model.
-- It must not inherit all Branch Manager or Management permissions.
+- The role is included in the RBAC model as the canonical operational staff role.
+- It must not inherit Branch Manager permissions (such as product-catalog editing, user provisioning, or managerial price overrides).
 - It must not manually bypass the automatic loyalty-point behaviour defined by FR-010.
-- Any new point-of-sale functionality or permission not clearly supported by the approved SRS must be handled through the appropriate requirement/design-change process before implementation.
+- Any operational functionality must follow approved requirements and least privilege.
 
 ---
 
@@ -254,11 +245,9 @@ Public self-registration must create only:
 A public user must not be allowed to choose or submit a privileged role such as:
 
 - `SYSTEM_ADMIN`
-- `INVENTORY_MANAGER`
 - `BRANCH_MANAGER`
 - `OPTOMETRIST`
-- `MANAGEMENT`
-- `SALES_ASSISTANT_CASHIER`
+- `BRANCH_ASSISTANT`
 
 The backend must assign or enforce the `CUSTOMER` role for public registration rather than trusting a role value supplied by the client.
 
@@ -314,9 +303,9 @@ After this ADR is accepted:
 
 ### Backend
 
-Backend #4 and related identity models must use only the canonical roles defined in this ADR.
+Backend identity models and staff schemas must use only the canonical roles defined in this ADR (`SYSTEM_ADMIN`, `BRANCH_MANAGER`, `OPTOMETRIST`, `BRANCH_ASSISTANT`, `CUSTOMER`).
 
-Backend #7 RBAC middleware must use the same values and must not create another independent role list with different names.
+Backend RBAC middleware must use the same values and must not create another independent role list with different names.
 
 ### Authentication
 
@@ -330,7 +319,7 @@ The frontend must not independently introduce alternative authorization roles.
 
 ### Development Seed Data
 
-Backend #19 and other development seed mechanisms must create users only with roles approved by this ADR.
+Development seed mechanisms must create users only with roles approved by this ADR.
 
 ### Testing
 
@@ -342,7 +331,7 @@ Tests should verify that:
 - Unauthorized roles receive access-denied responses.
 - Invalid arbitrary role values are rejected.
 - Public registration cannot create privileged users.
-- Sales Assistant / Cashier does not inherit unrelated Branch Manager or Management permissions.
+- Branch Assistant does not inherit unrelated Branch Manager permissions.
 
 ---
 
@@ -350,19 +339,17 @@ Tests should verify that:
 
 ### Positive
 
-- One authoritative RBAC role model is established.
-- The SRS/SDS ambiguity is explicitly documented rather than silently handled in code.
-- Backend, frontend, authentication, seed data, and tests can use the same role definitions.
-- Sales Assistant / Cashier remains represented as required by the SRS stakeholder model.
-- Least privilege can be applied without granting Sales Assistants excessive management permissions.
+- One authoritative, streamlined RBAC role model with five canonical roles is established.
+- Role redundancy is eliminated by merging inventory and managerial oversight into `BRANCH_MANAGER`.
+- Operational branch staff are clearly represented by `BRANCH_ASSISTANT`.
+- Backend, frontend, authentication, seed data, and tests use identical role definitions.
+- Least privilege is preserved without granting frontline staff managerial powers.
 - Public registration cannot be used to create privileged accounts.
 
 ### Negative / Trade-offs
 
-- The SDS authorization model must be updated because it currently defines only six main RBAC roles.
-- Backend and frontend implementations must coordinate canonical role values.
-- Adding another role increases the number of authorization scenarios that must be tested.
-- Exact Sales Assistant / Cashier operational permissions may require additional clarification where the existing Functional Requirements Register does not define a corresponding function.
+- The SDS authorization model and SRS stakeholder mapping must be updated to reflect the 5-role structure.
+- Legacy references to retired roles (`INVENTORY_MANAGER`, `MANAGEMENT`, `SALES_ASSISTANT_CASHIER`) across existing ADRs, tests, and documentation must be updated or aligned.
 
 ### Security Impact
 
@@ -376,13 +363,11 @@ Backend authorization checks must be applied to all protected operations.
 
 ## 15. Remaining Clarification
 
-The authoritative role **identity** is resolved by this ADR, but the project must not invent new Sales Assistant / Cashier business functionality.
+The authoritative role **identity** is resolved by this ADR.
 
-The SRS stakeholder description identifies operational Sales Assistant duties, while the current Functional Requirements Register does not provide a dedicated Sales Assistant-owned functional requirement.
+The frontline operational staff responsibilities are consolidated under `BRANCH_ASSISTANT`.
 
-If implementation requires new capabilities beyond the approved requirements, such as a dedicated point-of-sale workflow, manual loyalty adjustment, or additional customer-account access, those capabilities must be clarified and approved through the project requirement/design-change process before implementation.
-
-This clarification does not prevent the canonical `SALES_ASSISTANT_CASHIER` role from being defined and used in the RBAC model.
+If implementation requires new capabilities beyond the approved requirements, such as a dedicated point-of-sale workflow or manual loyalty adjustments, those capabilities must be clarified and approved through the project requirement/design-change process before implementation.
 
 ---
 
@@ -390,7 +375,7 @@ This clarification does not prevent the canonical `SALES_ASSISTANT_CASHIER` role
 
 | Reference | Relevance |
 |---|---|
-| SRS Section 7 — Stakeholders | Defines System Administrator, Branch Manager, Optometrist / Medical Staff, Inventory Manager, Sales Assistant / Cashier, Customer, and Management stakeholders |
+| SRS Section 7 — Stakeholders | Defines project stakeholders; streamlined to System Administrator, Branch Manager, Optometrist, Branch Assistant, and Customer |
 | SRS FR-001 | Customer and staff registration/authentication using secure credentials |
 | SRS FR-002 | Customer profile and prescription-history functionality |
 | SRS FR-003 | Product catalog management |
@@ -399,7 +384,7 @@ This clarification does not prevent the canonical `SALES_ASSISTANT_CASHIER` role
 | SRS FR-009 / FR-010 / FR-012 | Payment, loyalty, and management-reporting responsibilities |
 | SRS FR-013 | Clinical prescription recording |
 | SDS Section 6.1 — Authentication Mechanism | Defines JWT authentication and role representation |
-| SDS Section 6.2 — Authorization Levels | Defines the current six-role RBAC model and access-control matrix |
+| SDS Section 6.2 — Authorization Levels | Defines the RBAC model and access-control matrix |
 | Development Guideline Section 1.3 — Project Continuity | Significant SDS deviations must be documented using an ADR and reflected in the final SDS |
 | DDP-033 | Requires one authoritative OSMS RBAC role model |
 
@@ -409,7 +394,8 @@ This clarification does not prevent the canonical `SALES_ASSISTANT_CASHIER` role
 
 | Date | Reviewer | Role | Status | Notes |
 |---|---|---|---|---|
-| 2026-09-09 | thiruniimasha | Team Member | Approved | Peer review completed; no blocking issues. Reviewer suggested adding ADR-002 to the README documentation index. |
+| 2026-09-09 | thiruniimasha | Team Member | Approved | Peer review completed; no blocking issues. |
+| 2026-10-12 | Development Team | Approved | Consolidated role model: retired `MANAGEMENT`, `INVENTORY_MANAGER`, and `SALES_ASSISTANT_CASHIER`. Reassigned to `BRANCH_MANAGER` and introduced canonical `BRANCH_ASSISTANT`. |
 | — | — | Supervisor | Pending | — |
 
-> Peer review has been completed and the ADR is accepted. Supervisor review remains pending. The final SDS must be updated to reflect the authoritative RBAC role model as required by the project change-management process.
+> The final SDS must be updated to reflect the authoritative RBAC role model as required by the project change-management process.
