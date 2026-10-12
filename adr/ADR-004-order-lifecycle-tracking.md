@@ -175,10 +175,10 @@ Exact HTTP status codes and response schemas will be defined by the backend impl
 ## 11. Status Update Authorization
 Status-update authorization must follow **ADR-002 – Authoritative RBAC Role Model**.
 Customers must have read-only Order-tracking access and must not directly update operational Order status.
-Operational Order-status updates may be performed by authorized staff members whose canonical roles are permitted to perform the relevant operation under ADR-002 and the approved access-control model.
+Operational Order-status updates may be performed by authorized branch staff (`BRANCH_ASSISTANT` and `BRANCH_MANAGER`) whose canonical roles are permitted to perform the relevant operation under ADR-002 and the approved access-control model.
 This ADR does not introduce a new generic `STAFF` role value. Authorization must continue to use the canonical roles defined by ADR-002.
 Therefore:
-- authorized staff members may update Order status where their approved role permits that operation,
+- authorized staff members (`BRANCH_ASSISTANT` and `BRANCH_MANAGER`) may update Order status where their approved role permits that operation,
 - `CUSTOMER` may view only their own tracking information and cannot update status,
 - read permission does not automatically provide update permission,
 - staff roles must not receive Order-status update permission unless that permission is allowed by the approved access-control model,
@@ -200,7 +200,7 @@ Backend authorization remains authoritative.
 Staff Order-tracking visibility must follow:
 - the approved SRS/SDS access-control model,
 - ADR-002.
-Where the approved access-control rules allow `INVENTORY_MANAGER` or `BRANCH_MANAGER` to view Order-tracking information, the backend may provide that authorized read access.
+Where the approved access-control rules allow `BRANCH_MANAGER` or `BRANCH_ASSISTANT` to view Order-tracking information, the backend may provide that authorized read access.
 This ADR does not independently expand staff permissions.
 Read access must not automatically grant Order-status update permission.
 ---
@@ -500,6 +500,7 @@ Dependent implementation must not independently introduce alternative statuses, 
 | 2026-10-09 | Development Team         | Proposed               | Initial ADR prepared for review under DDP-037 / Issue #14. `PICKED_UP` included to distinguish external-party collection from final Customer receipt. |
 | 2026-10-10 | Peer Reviewer            | Reviewed               | Requested authorized staff status-update access and automated Customer cancellation notification with refund-contact guidance; feedback incorporated.                                                                                                                                                     |
 | 2026-10-10        | Supervisor / Stakeholder | Accepted | OK to Proceed                                                                                                                                                    |
+| 2026-10-12 | Development Team | Approved | Aligned roles with ADR-002: replaced retired `INVENTORY_MANAGER` with `BRANCH_ASSISTANT` for staff viewing and status updates alongside `BRANCH_MANAGER`. |
 ---
 ## 27. Decision Summary
 The accepted OSMS Order-tracking lifecycle is:

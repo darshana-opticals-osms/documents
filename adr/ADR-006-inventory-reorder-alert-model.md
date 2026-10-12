@@ -446,46 +446,47 @@ This keeps DDP-041 compatible with ADR-006.
 
 Authorization must follow ADR-002 – Authoritative RBAC Role Model.
 
-### Inventory Manager
+### Branch Manager
 
-`INVENTORY_MANAGER` is the primary role responsible for stock management and reorder alerts.
+`BRANCH_MANAGER` is the primary role responsible for branch stock management, inventory operations, and reorder alerts.
 
-The Inventory Manager may:
+The Branch Manager may:
 
-- view active reorder alerts,
-- manage reorder-alert information where required,
+- view active reorder alerts for their branch,
+- manage reorder-alert information and acknowledgments where required,
 - view the global reorder threshold,
 - modify the global reorder threshold.
 
-### Branch Manager
-
-`BRANCH_MANAGER` may receive approved read-only visibility of relevant Inventory/reorder-alert information.
-
-Read access must not automatically provide permission to:
-
-- change the global reorder threshold,
-- modify Inventory quantities,
-- resolve alerts manually where not approved.
-
-### Management
-
-`MANAGEMENT` may receive approved read-only visibility for inventory/reporting purposes.
-
-Read access does not provide threshold-management permission.
-
 ### System Administrator
 
-`SYSTEM_ADMIN` is not the normal business owner of reorder-threshold management.
+`SYSTEM_ADMIN` possesses administrative threshold-configuration authorization alongside the Branch Manager to ensure administrative oversight and configuration management:
 
-The reorder threshold is treated as an Inventory business rule managed by `INVENTORY_MANAGER`.
+- view the global reorder threshold,
+- modify the global reorder threshold.
+
+`SYSTEM_ADMIN` does not perform day-to-day branch stock management or routine alert handling, which remains owned by `BRANCH_MANAGER`.
+
+### Branch Assistant Limitation
+
+The canonical operational staff role `BRANCH_ASSISTANT` assists with sales and frontline branch activities:
+
+- `BRANCH_ASSISTANT` is strictly restricted from modifying the global reorder threshold.
+- `BRANCH_ASSISTANT` does not manage inventory reorder alert settings or thresholds.
+
+### Retired Legacy Roles
+
+The legacy roles `INVENTORY_MANAGER` and `MANAGEMENT` are retired per ADR-002:
+- Stock tracking, reorder alert handling, and inventory oversight are consolidated under `BRANCH_MANAGER`.
+- Managerial reporting previously associated with `MANAGEMENT` is unified under `BRANCH_MANAGER`.
 
 ---
 
 ## 21. Threshold Configuration Authorization
 
-Only an authenticated user with the canonical role:
+Only an authenticated user with the canonical roles:
 
-`INVENTORY_MANAGER`
+- `BRANCH_MANAGER`
+- `SYSTEM_ADMIN`
 
 may modify the global reorder threshold through the approved backend functionality.
 
@@ -544,7 +545,7 @@ At minimum:
 - threshold must be numeric,
 - threshold must be finite,
 - threshold must not be negative,
-- threshold modification must be restricted to `INVENTORY_MANAGER`,
+- threshold modification must be restricted to `BRANCH_MANAGER` and `SYSTEM_ADMIN`,
 - invalid Inventory identifiers must be rejected,
 - alert operations must reference an existing Inventory record,
 - Inventory quantity must never become negative.
@@ -591,7 +592,7 @@ Those behaviours require separate approved requirements and implementation.
 - Threshold configuration is centralized.
 - Reorder alerts are persisted.
 - Duplicate active alerts are prevented.
-- Inventory Managers receive repeated in-app reminders.
+- Branch Managers receive repeated in-app reminders.
 - Alerts stop automatically when stock returns above the threshold.
 - Manual Inventory updates and checkout use the same reorder logic.
 - Backend business logic remains authoritative.
@@ -612,7 +613,7 @@ Those behaviours require separate approved requirements and implementation.
 
 - FR-005 – Real-Time Stock Synchronization
 - FR-006 – Automated Inventory Reorder Alerts
-- Inventory Manager responsibilities
+- Branch Manager stock management and inventory responsibilities (consolidating legacy Inventory Manager and Management oversight)
 - Relevant inventory and reporting access requirements
 
 ### SDS
@@ -659,6 +660,7 @@ Those changes belong to their dedicated Sprint 2 implementation issues.
 |---|---|---|---|
 | 2026-10-09 | Development Team | Agreed | Global threshold 5, `quantity <= 5` low-stock rule, persisted alerts, immediate evaluation, 3-hour in-app reminders during working hours, Inventory Manager threshold ownership. |
 | 2026-10-10 | thiruniimasha | Approved | Reviewed the updated ADR; previously raised threshold-reconciliation and alert-lifecycle blockers were resolved. No blocking issues remain. |
+| 2026-10-12 | Development Team | Approved | Aligned roles with ADR-002: retired `INVENTORY_MANAGER` and `MANAGEMENT`; reorder alert management assigned to `BRANCH_MANAGER`; global threshold configuration authorized for `BRANCH_MANAGER` and `SYSTEM_ADMIN`; `BRANCH_ASSISTANT` restricted. |
 | — | — | Supervisor | Pending | — |
 
 ---
@@ -670,7 +672,7 @@ OSMS will use the following authoritative reorder-alert model:
 - Global reorder threshold is `5`.
 - An Inventory item is low stock when `quantity <= 5`.
 - The threshold is stored as one global Inventory configuration value.
-- `INVENTORY_MANAGER` may change the global threshold.
+- `BRANCH_MANAGER` and `SYSTEM_ADMIN` may change the global threshold.
 - Reorder alerts are persisted.
 - Each Inventory record may have only one active reorder alert.
 - The Inventory MongoDB `_id` is used as the authoritative Inventory identifier.
@@ -678,8 +680,8 @@ OSMS will use the following authoritative reorder-alert model:
 - Active low-stock conditions receive in-app reminders every 3 hours during the 8:00 AM–6:00 PM working period.
 - Repeated reminders update/use the existing alert rather than creating duplicate active alerts.
 - When quantity becomes greater than the threshold, the alert is resolved/inactive and reminders stop.
-- `INVENTORY_MANAGER` manages reorder alerts.
-- `BRANCH_MANAGER` and `MANAGEMENT` receive approved read-only visibility.
+- `BRANCH_MANAGER` manages reorder alerts and receives active reminders.
+- `BRANCH_ASSISTANT`, `OPTOMETRIST`, and `CUSTOMER` roles are restricted from modifying threshold and alert management.
 - Alerts are in-app only.
 - Email and SMS are outside Sprint 2 scope.
 - Manual Inventory updates and checkout/order deductions must use the same centralized reorder-evaluation logic.

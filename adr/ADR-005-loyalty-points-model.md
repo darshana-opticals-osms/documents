@@ -282,7 +282,7 @@ This is a proposed architectural direction for review. It is not yet Accepted.
 The proposed rationale is:
 
 - fast balance retrieval for customer display
-- auditable history for Management review
+- auditable history for Branch Manager review
 - traceability to source transaction details
 - support for compensating reversals
 - support for future approved redemption deductions
@@ -356,27 +356,27 @@ Frontend visibility is not an authorization control.
 
 This ADR adopts the own-data access principle required by the approved auth policy and by the design requirement that customer records are customer-owned.
 
-## 11. Management Access
+## 11. Branch Manager Oversight & Access
 
-ADR-002 defines the Management / Owner role as the authorization basis for business oversight and reporting.
+ADR-002 defines the Branch Manager role (`BRANCH_MANAGER`) as the authoritative basis for operational oversight and reporting following the consolidation of legacy management functions.
 
-In this ADR, Management may:
+In this ADR, the Branch Manager may:
 
 - review approved loyalty information
 - monitor loyalty updates
 - inspect audit context for customer balance/history records
 
-Management does not receive unrestricted point mutation authority by default.
+The Branch Manager does not receive unrestricted point mutation authority by default.
 
-The phrase “Owner” in the SDS FR-010 matrix does not automatically grant arbitrary manual editing rights.
+The phrase “Owner” in the SRS FR-010 matrix does not automatically grant arbitrary manual editing rights.
 
-## 12. Sales Assistant / Cashier Role
+## 12. Branch Assistant Role
 
 ADR-002 identifies the role:
 
-- SALES_ASSISTANT_CASHIER
+- `BRANCH_ASSISTANT`
 
-This role is relevant to operational point-of-sale loyalty activity.
+This canonical role represents frontline operational staff assisting with customer service and counter transactions.
 
 However, this ADR does not grant that role any arbitrary manual loyalty-adjustment authority. The role must not:
 
@@ -637,7 +637,7 @@ This ADR also addresses the security and privacy expectations that must accompan
 The proposed model must include:
 
 - customer own-data access only
-- Management review in line with ADR-002
+- Branch Manager review in line with ADR-002
 - least privilege
 - backend-authoritative calculation
 - no client-controlled balance values
@@ -718,6 +718,7 @@ This ADR does not claim that ADR-003 or ADR-004 already exist in the merged repo
 | 2026-10-04 | — | Team / Business Clarification | Completed | Business-rule clarification recorded |
 | 2026-10-04 | thiruniimasha | Peer Reviewer | Approved | Peer review completed; non-blocking clarifications incorporated. |
 | 2026-10-05 | Project Supervisor | Supervisor | Approved | Formal supervisor review completed and approved. |
+| 2026-10-12 | Development Team | Approved | Aligned roles with ADR-002: updated business oversight to `BRANCH_MANAGER` and replaced legacy cashier role with `BRANCH_ASSISTANT`. |
 
 Peer review and supervisor approval have been completed and this ADR is Accepted.
 

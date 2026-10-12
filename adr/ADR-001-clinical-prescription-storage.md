@@ -204,7 +204,7 @@ Access control for clinical prescription data is governed by the baseline permis
 
 - **Authorized Optometrist / Medical Staff**: Can record and modify clinical prescription data (FR-013).
 - **Customers**: Can view their own prescription history (FR-002).
-- **Other Roles**: Detailed role permissions for all other system roles (e.g., Admin, Branch Manager, Management) must follow the authoritative RBAC ADR and are not defined within this storage design ADR.
+- **Other Roles**: Detailed role permissions for all other system roles (e.g., System Administrator, Branch Manager, Branch Assistant) must follow the authoritative RBAC ADR (ADR-002) and are not defined within this storage design ADR.
 
 > **Security Control Rule:** Backend authorization middleware must be the primary security control enforcing role-based access on all prescription endpoints. Frontend UI visibility controls alone must not be treated as an authorization mechanism.
 
