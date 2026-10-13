@@ -29,7 +29,7 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 | ADR-006 | Inventory Reorder-Alert Rules and Persistence Model | [`adr/ADR-006-inventory-reorder-alert-model.md`](adr/ADR-006-inventory-reorder-alert-model.md) | Accepted |
 | ADR-007 | Appointment Scheduling, Availability, and Lifecycle Rules | [`adr/ADR-007-appointment-scheduling-lifecycle.md`](adr/ADR-007-appointment-scheduling-lifecycle.md) | Accepted |
 | ADR-008 | Inventory Image Upload and Cloudinary Storage Architecture | [`adr/ADR-008-inventory-image-upload-cloudinary.md`](adr/ADR-008-inventory-image-upload-cloudinary.md) | Accepted |
-| ADR-009 | Appointment Communication and Automated Reminder Scope Decision | [`adr/ADR-009-appointment-communication-policy.md`](adr/ADR-009-appointment-communication-policy.md) | Proposed |
+| ADR-009 | Appointment Communication and Automated Reminder Scope Decision | [`adr/ADR-009-appointment-communication-policy.md`](adr/ADR-009-appointment-communication-policy.md) | Accepted |
 | ADR-010 | AI Chatbot Architecture and Knowledge Strategy | [`adr/ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md`](adr/ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md) | Accepted |
 
 ### Development Standards

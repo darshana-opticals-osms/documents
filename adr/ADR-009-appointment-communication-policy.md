@@ -6,7 +6,7 @@ Appointment Communication and Automated Reminder Scope Decision for OSMS
 
 ## 2. Status
 
-**Proposed** — Pending formal review and approval.
+**Accepted** — Accepted through the peer review of PR #35 on 2026-10-13.
 
 ---
 
@@ -129,11 +129,11 @@ The following earlier directions are affected only for the current **appointment
 - SDS Section 6.2, Authorization Levels — Branch Manager ownership of automated appointment reminders under FR-008.
 - SDS Section 7.3, Network Diagram, **Connectivity Logic** — outbound Twilio/Nodemailer integration for automated SMS/email reminders.
 
-The approved SRS and SDS PDFs remain unchanged and are retained as historical baselines. This Proposed ADR records the intended architectural deviation but does not automatically override formal requirements before approval.
+The approved SRS and SDS PDFs remain unchanged and are retained as historical baselines. This accepted ADR records the current architectural deviation from SRS FR-008 and the relevant SDS automated-reminder design for the appointment-specific scope only. It does not imply that the original SRS or SDS files were physically modified.
 
 ADR-007 Section 29 already establishes manual appointment communication and remains authoritative for the accepted current appointment workflow. ADR-002 remains authoritative for canonical role names and role boundaries.
 
-Once this ADR is accepted through the project's review and change-control process, it must be read together with ADR-007 as the authoritative current appointment-communication decision. Any future formal SRS or SDS revision should incorporate the accepted deviation.
+This ADR must be read together with ADR-007 as the authoritative current appointment-communication decision. Any future formal SRS or SDS revision should incorporate this accepted deviation through the project's change-control process.
 
 This precedence is narrow. It does not supersede order updates or any other notification requirement outside appointment reminders.
 
@@ -214,7 +214,7 @@ This ADR does not implement automated or manual communication functionality and 
 ## 12. Documentation Impact
 
 - The original approved SRS and SDS PDFs are preserved unchanged by this decision record.
-- Their appointment-specific automated-reminder direction is documented here as a controlled deviation pending approval.
+- Their appointment-specific automated-reminder direction is documented here as the accepted current deviation for appointment communication; the original PDF files have not been physically modified.
 - ADR-007 remains authoritative for appointment scheduling, lifecycle, cancellation, rescheduling, capacity, status, and timezone rules.
 - ADR-002 remains authoritative for canonical role definitions and general authorization boundaries.
 - This ADR is limited to the appointment-communication architecture.
@@ -256,12 +256,12 @@ This ADR does not implement automated or manual communication functionality and 
 
 ## 14. Review Record
 
-| Date | Reviewer / Group | Result | Notes |
-|---|---|---|---|
-| — | — | Pending | Formal review and approval required. |
+| Date | Reviewer / Group | Result | Notes | Reference |
+|---|---|---|---|---|
+| 2026-10-13 | KavinduAmalka | Accepted | Team unanimously accepted Option C; no blocking concerns. | [PR #35](https://github.com/darshana-opticals-osms/documents/pull/35) |
 
 ---
 
 ## 15. Decision Summary
 
-OSMS will use manual staff communication for the current appointment workflow. The canonical `BRANCH_ASSISTANT` role handles operational appointment coordination according to ADR-002 and ADR-007. No automated appointment reminder provider, scheduler, persistence model, retry workflow, delivery state, or tracking subsystem is introduced. Appointment lifecycle behavior remains governed by ADR-007. The original SRS/SDS automated-reminder direction remains preserved as a historical baseline and becomes a controlled, appointment-specific deviation only after this ADR completes formal approval and change control.
+OSMS will use manual staff communication for the current appointment workflow. The canonical `BRANCH_ASSISTANT` role handles operational appointment coordination according to ADR-002 and ADR-007. No automated appointment reminder provider, scheduler, persistence model, retry workflow, delivery state, or tracking subsystem is introduced. Appointment lifecycle behavior remains governed by ADR-007. This accepted ADR records the current appointment-specific deviation from SRS FR-008 and the relevant SDS automated-reminder design. The original SRS and SDS remain unchanged as historical baselines.
