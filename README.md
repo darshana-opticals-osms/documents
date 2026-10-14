@@ -25,12 +25,14 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 | ADR-001 | Clinical Prescription Data Storage Design | [`adr/ADR-001-clinical-prescription-storage.md`](adr/ADR-001-clinical-prescription-storage.md) | Proposed |
 | ADR-002 | Authoritative RBAC Role Model | [`adr/ADR-002-rbac-role-model.md`](adr/ADR-002-rbac-role-model.md) | Accepted |
 | ADR-003 | Shopping Cart Persistence and Checkout Boundary | [`adr/ADR-003-shopping-cart-checkout-boundary.md`](adr/ADR-003-shopping-cart-checkout-boundary.md) | Accepted |
+| ADR-004 | Order Lifecycle and Tracking Status Model | [`adr/ADR-004-order-lifecycle-tracking.md`](adr/ADR-004-order-lifecycle-tracking.md) | Accepted |
 | ADR-005 | Loyalty Points Calculation and Persistence Model | [`adr/ADR-005-loyalty-points-model.md`](adr/ADR-005-loyalty-points-model.md) | Accepted |
 | ADR-006 | Inventory Reorder-Alert Rules and Persistence Model | [`adr/ADR-006-inventory-reorder-alert-model.md`](adr/ADR-006-inventory-reorder-alert-model.md) | Accepted |
 | ADR-007 | Appointment Scheduling, Availability, and Lifecycle Rules | [`adr/ADR-007-appointment-scheduling-lifecycle.md`](adr/ADR-007-appointment-scheduling-lifecycle.md) | Accepted |
 | ADR-008 | Inventory Image Upload and Cloudinary Storage Architecture | [`adr/ADR-008-inventory-image-upload-cloudinary.md`](adr/ADR-008-inventory-image-upload-cloudinary.md) | Accepted |
 | ADR-009 | Appointment Communication and Automated Reminder Scope Decision | [`adr/ADR-009-appointment-communication-policy.md`](adr/ADR-009-appointment-communication-policy.md) | Accepted |
 | ADR-010 | AI Chatbot Architecture and Knowledge Strategy | [`adr/ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md`](adr/ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md) | Accepted |
+| ADR-011 | Secure Payment Gateway Integration and Payment Lifecycle Architecture | [`adr/ADR-011-secure-payment-gateway-integration.md`](adr/ADR-011-secure-payment-gateway-integration.md) | Accepted |
 
 ### Development Standards
 
@@ -52,12 +54,14 @@ documents/
 │   ├── ADR-001-clinical-prescription-storage.md
 │   ├── ADR-002-rbac-role-model.md
 │   ├── ADR-003-shopping-cart-checkout-boundary.md
+│   ├── ADR-004-order-lifecycle-tracking.md
 │   ├── ADR-005-loyalty-points-model.md
 │   ├── ADR-006-inventory-reorder-alert-model.md
 │   ├── ADR-007-appointment-scheduling-lifecycle.md
 │   ├── ADR-008-inventory-image-upload-cloudinary.md
 │   ├── ADR-009-appointment-communication-policy.md
-│   └── ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md
+│   ├── ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md
+│   └── ADR-011-secure-payment-gateway-integration.md
 └── README.md
 ```
 
