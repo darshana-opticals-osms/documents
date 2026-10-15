@@ -12,6 +12,8 @@ Approved through peer review, team alignment, and client confirmation on 2026-10
 
 ---
 
+The session-budget clarification in sections 9.3.2, 11.1.1 and 11.6 was approved by the issue implementer on 2026-10-15 before backend#77 implementation. This amendment is submitted for normal peer review; it does not claim a new supervisor sign-off. The original Accepted review record is retained.
+
 ## 3. Context
 
 The Optical Shop Management System (OSMS) requires an AI-driven Chatbot assistance capability to handle customer inquiries regarding store hours, services, product categories, order status guidance, and store policies (FR-011 – AI-Driven Chatbot Assistance).
@@ -114,7 +116,7 @@ The team evaluated four architectural options for FR-011:
 | **Knowledge Source** | MongoDB OSMS `Knowledge Area` collection | Authoritative single source of truth managed internally by the Shop Branch Manager. |
 | **Retrieval Strategy** | Text / Keyword Search + Category Filter over `Knowledge Area` | High precision, zero extra vector database overhead, fully adequate for OSMS domain scale (~50-200 articles). |
 | **Vector Embeddings** | **Not Required** (Explicitly rejected for baseline scope) | Avoids unnecessary infrastructure cost and maintenance (YAGNI). |
-| **Conversation Model** | Stateless Backend + Client-side `sessionStorage`; **purged on logout/tab close** | Maximum customer privacy; zero database message log overhead; conversation state held in browser `sessionStorage` during active session only. |
+| **Conversation Model** | Stateless conversation processing + client-side `sessionStorage`; **text purged on logout/tab close**. Minimal server-side usage metadata enforces section 11.1.1. | Maximum customer privacy; zero database message log overhead; conversation state held in browser `sessionStorage` during active session only. |
 | **Authentication** | Authenticated Customer Role (`CUSTOMER`) required | Enforces ADR-002 RBAC; prevents anonymous abuse and isolates customer data. Chatbot available only after login. |
 | **Data Boundary** | Retail/store FAQ & customer own order-status metadata only | **Strictly excludes** clinical prescription data (ADR-001), payments, passwords, and internal credentials. |
 | **Frontend Rendering** | Plain text rendering | Plain text display in frontend widget; prevents HTML execution or script injection risks. |
@@ -188,7 +190,7 @@ To ensure complete customer privacy and avoid unnecessary database storage overh
 1. **Stateless Backend Processing**:
    - The backend Chatbot service processes incoming queries statelessly (`POST /api/v1/chatbot/query`).
    - The backend performs Knowledge Area retrieval, formats the grounded prompt, invokes Google Gemini API via `IChatbotAdapter`, and returns the plain-text answer to the frontend.
-   - The backend **does not store full conversation message logs in MongoDB**.
+   - The backend **does not store full conversation message logs in MongoDB**. A separate minimal usage record in the existing MongoDB database enforces the shared Customer budget in section 11.1.1; it contains no conversation text or authentication tokens.
 
 2. **Client-Side `sessionStorage` Management**:
    - Active in-session chat messages are stored in browser **`sessionStorage`** (e.g., `sessionStorage.getItem('osms_chat_history')`).
@@ -274,7 +276,67 @@ CUSTOMER QUESTION:
 
 ### 11.1 Context Window & Limits (AC26, AC27)
 - **Context Window**: Multi-turn history sent to the LLM is limited to the last **6 messages** (3 conversational turns) during the active session to keep context prompts concise and prevent unbounded token usage.
-- **Message Limits**: Maximum 500 characters per message; maximum 20 messages per session.
+- **Message Limits**: Maximum 500 characters per message; maximum 20 messages per session (10 question/reply exchanges under section 11.1.1).
+
+### 11.1.1 Authoritative Usage Session Contract (backend#77)
+
+1. A usage session is a fixed 30-minute window beginning with the first admitted
+   valid query for an authenticated Customer. All tabs, devices and JWTs for that
+   Customer share that window. It does not slide with activity.
+2. The budget is 20 messages, interpreted as 10 admitted exchanges: one Customer
+   question and one reserved assistant reply per exchange. Reserve both slots
+   atomically before boundary handling, knowledge retrieval or provider work.
+   Unsupported and provider-failure fallback replies consume the reservation.
+3. Authentication, authorization, rate-limit and input-validation rejections do
+   not consume slots. Once admitted, a request consumes its two slots even if
+   retrieval, persistence or delivery fails. A disconnect does not refund slots;
+   this avoids retries and crashes permitting repeated provider work.
+4. An adapter's automatic retry belongs to the original exchange and consumes no
+   additional slots. A manual retry or replay is a new exchange and consumes two
+   slots. No idempotency contract or stored response cache is introduced.
+5. Refresh, history omission, shorter history, clearing browser storage, changing
+   client identifiers, logout/login and tab close do not reset the usage budget.
+   Logout and tab close still purge browser conversation text as required by the
+   Accepted ADR. Backend usage expires independently; no reset endpoint exists.
+6. The next valid query at or after expiry starts a fresh usage window. A request
+   admitted before expiry belongs to its original window even if it finishes
+   later. Admission time is evaluated by the database to keep replicas consistent.
+7. Persist one minimal usage record per Customer in the existing MongoDB database:
+   authenticated Customer reference, window start/expiry and reserved message
+   count. Do not store messages, hashes of messages, JWTs, provider payloads,
+   clinical/payment details or additional Customer PII. This is usage metadata,
+   while conversation processing remains stateless.
+8. Use a TTL index to delete expired usage records, with MongoDB's asynchronous
+   TTL cleanup delay explicitly acknowledged. Expiry is enforced in admission
+   logic independently of physical deletion. Reuse an expired record atomically
+   if cleanup has not run; delete usage metadata on Customer deletion as well.
+   The TTL cleanup delay must be acceptable to the ADR reviewers; this proposal
+   does not promise immediate physical deletion at expiry.
+
+**Concurrency and durability**: Use a unique Customer key and atomic conditional MongoDB admission with database time and majority-acknowledged writes. Competing first requests, final-slot requests, expiry rollover and TTL deletion races must never exceed the budget.
+
+**Account deletion and operations**: Customer model deletion removes matching usage. Administrative raw/bulk database deletions bypass model hooks and must explicitly remove matching usage records. Deployments with automatic indexing disabled must provision the expiry TTL index.
+
+**API and frontend compatibility**
+
+Keep `POST /api/v1/chatbot/query` and its existing message/history request and
+successful response unchanged. Derive ownership exclusively from the verified
+Customer JWT. Accept no client session reference or usage counter as authority.
+Keep the 500-character limit, six-entry context and 10 requests/minute controls.
+
+Exhaustion returns HTTP 429 with stable code `CHATBOT_SESSION_EXHAUSTED`, safe
+message `Chatbot session message limit reached. Please try again later.`, and
+`Retry-After` seconds until window expiry. Document the code and response envelope
+in Swagger using the existing error conventions. Database admission failure must
+fail closed with a safe 503 before retrieval/provider work.
+
+Existing frontend requests remain compatible. The widget should distinguish
+session exhaustion from the existing per-minute limit and retain any safe retry
+guidance. Its local transcript bound is a UX control and may show fewer messages
+than the shared backend window permits. Clearing the transcript does not reset
+the backend budget. No frontend session identifier migration is needed.
+
+**Verification**: Mock-adapter unit and real-endpoint integration tests cover exact boundary/overflow without retrieval or provider work, concurrent admission/rollover, replay and client identifier tampering, Customer isolation, failure/retry semantics, expiry, deletion, and existing input/context/rate-limit controls.
 
 ### 11.2 Rate Limiting (AC28, AC39)
 - Chatbot endpoints MUST enforce rate limits of **10 requests per minute per authenticated customer ID** to prevent API cost overruns and service abuse.
@@ -296,6 +358,8 @@ CUSTOMER QUESTION:
 - **Zero Database Message Persistence**: Full customer conversation message logs are NOT persisted in the MongoDB database.
 - **Client-Side `sessionStorage` Lifecycle**: Active chat history exists only in browser `sessionStorage` during an active authenticated session.
 - **Automatic Deletion on Logout & Window Close**: Executing customer logout runs `sessionStorage.removeItem('osms_chat_history')`, instantly purging all local chat messages. Closing the browser tab/window also automatically clears `sessionStorage`. Customers cannot view past chat history upon logging back in.
+
+- **Usage Metadata Retention**: The bounded usage record follows section 11.1.1 independently of browser text deletion. It expires after the fixed 30-minute window and is physically removed by asynchronous MongoDB TTL cleanup or Customer deletion. It never stores conversation content.
 
 ### 11.7 Knowledge Area Content Management & Ownership (AC36, AC37)
 - **Content Ownership**: Creating, updating, and deactivating `Knowledge Area` articles in the system is owned by the Shop **Branch Manager** (`BRANCH_MANAGER` role).
@@ -373,3 +437,4 @@ The Chatbot Widget UI (DDP-061) MUST adhere to WCAG 2.1 AA guidelines (SDS Secti
 | 2026-10-06 | Development Team | Author / Maintainer | Proposed | Initial draft of ADR-010 addressing FR-011 architecture, schema extensions, RAG model, provider abstraction, security, and operational limits. |
 | 2026-10-08 | thiruniimasha | Team Member / Peer Reviewer | Approved | Peer review completed. Confirmed decisions with team and client: Google Gemini API integration, plain-text response rendering, Branch Manager content ownership, fallback contact details (077 776 2494 / darshanaoptic@gmail.com), authenticated customer access, and automatic chat log deletion on logout. |
 | 2026-10-08 | Project Supervisor | Supervisor | Approved | Approved authoritative AI Chatbot Architecture and Knowledge Strategy. ADR status changed to Accepted. |
+| 2026-10-15 | Issue implementer | Maintainer | Clarification approved; peer review requested | Approved fixed 30-minute shared Customer usage windows, 20 messages as 10 exchanges, atomic admission, retry/failure/reset semantics and minimal TTL usage metadata for [backend#77](https://github.com/darshana-opticals-osms/backend/issues/77). Approval was given before implementation in the workspace; no additional supervisor sign-off is claimed. |
