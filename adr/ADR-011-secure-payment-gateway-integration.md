@@ -226,7 +226,7 @@ A `Payment` record is created **only after** an `Order` has been successfully cr
    - Order tracking status is `ORDER_CREATED`.
    - Order has not expired (within the 30-minute stock reservation window).
    - Order does not already have an existing `completed` payment.
-   - No concurrent `pending` payment is in flight (or an expired pending session is cleanly superseded).
+   - No concurrent `pending` or `processing` payment is in flight.
 4. The backend initializes a new `Payment` record with:
    - `orderId`: Target order ID.
    - `amount`: Authoritative `Order.orderAmount`.
@@ -241,6 +241,16 @@ A `Payment` record is created **only after** an `Order` has been successfully cr
 - **1-to-Many Attempt Traceability**: If a customer experiences a network failure, declines a card, or cancels a payment session, that specific `Payment` record transitions to `failed` or `cancelled`. If the customer retries, the backend creates a **new distinct `Payment` attempt record** referencing the same `orderId`.
 - **Traceability and Audit**: Historical failed and cancelled attempts are retained for security auditing, fraud detection, and customer support troubleshooting. They are never overwritten or deleted.
 - **Single Active Session**: Only one `Payment` record for an `orderId` may be in `pending` or `processing` state at any given moment.
+
+### Original Reservation Deadline and Retry Boundary
+
+As a team-approved amendment, the Order's original inventory-reservation deadline is fixed at 30 minutes from checkout and is never extended by payment initiation or retry.
+
+- A failed or cancelled Payment attempt may be retried against the **same Order only while** that Order remains `ORDER_CREATED`, otherwise eligible, and within its original 30-minute reservation window.
+- Every permitted retry creates a new, distinct `Payment` record; the failed or cancelled attempt remains in history.
+- Once an eligible genuinely unpaid Order reaches its original deadline and is cancelled by the expiry workflow, that Order cannot accept another Payment attempt.
+- A customer who wants to try again after genuine expiry must return to the Cart, perform a fresh checkout, and create a **new Order**. The fresh checkout revalidates current Inventory availability, permitted quantities, and authoritative prices.
+- Expiry never creates a new reservation for the old Order and never re-reserves stock against that Order.
 
 ---
 
@@ -309,18 +319,18 @@ stateDiagram-v2
 |---|---|---|---|
 | `pending` | `processing` | Customer opens gateway session / gateway notifies processing. | Audit log recorded. |
 | `pending` | `completed` | Verified PayHere IPN received with `status_code = 2` and matching hash/amount. | `Order` -> `PROCESSING`; Loyalty points awarded; Confirmation unlocked. |
-| `pending` | `failed` | Verified PayHere IPN with `status_code = -2`, gateway rejection, or timeout. | Error logged; Order remains `ORDER_CREATED`; Retry permitted. |
-| `pending` | `cancelled` | Customer aborts payment at gateway; returns via `cancel_url`. | Cancellation logged; Order remains `ORDER_CREATED`; Retry permitted. |
+| `pending` | `failed` | Verified PayHere IPN with `status_code = -2`, gateway rejection, or timeout. | Error logged; Order remains `ORDER_CREATED`; same-Order retry is permitted only before the original deadline. |
+| `pending` | `cancelled` | Customer aborts payment at gateway; returns via `cancel_url`. | Cancellation logged; Order remains `ORDER_CREATED`; same-Order retry is permitted only before the original deadline. |
 | `processing` | `completed` | Verified PayHere IPN with `status_code = 2`. | `Order` -> `PROCESSING`; Loyalty points awarded. |
-| `processing` | `failed` | Verified PayHere IPN with `status_code = -2`. | Error logged; Retry permitted. |
-| `processing` | `cancelled` | Gateway session cancelled. | Cancellation logged; Retry permitted. |
+| `processing` | `failed` | Verified PayHere IPN with `status_code = -2`. | Error logged; same-Order retry is permitted only before the original deadline. |
+| `processing` | `cancelled` | Gateway session cancelled. | Cancellation logged; same-Order retry is permitted only before the original deadline. |
 | `completed` | `refunded` | Authorized Management offline refund reconciliation. | Order updated; Loyalty reversed (ADR-005). |
 
 ### Terminal State Invariance
 
 - `completed`, `failed`, `cancelled`, and `refunded` are **terminal states** for a given payment record.
 - A `completed` payment **can never transition to `failed` or `cancelled`**.
-- A `failed` or `cancelled` payment **can never be revived to `completed`**. Any subsequent customer payment attempt generates a brand new `Payment` document.
+- A `failed` or `cancelled` payment **can never be revived to `completed`**. A permitted retry generates a brand new `Payment` document and may reference the same Order only before that Order's original reservation deadline.
 
 ---
 
@@ -373,20 +383,23 @@ Payment gateways automatically retry webhooks if network latency delays the merc
   - The provider's sanitized error message is stored in `Payment.failureReason`.
   - The `Order` tracking status **remains `ORDER_CREATED`**.
   - Stock reservations remain intact for the remainder of the 30-minute checkout reservation window.
-  - The customer is presented with a safe failure screen with a "Retry Payment" option.
+  - The customer is presented with a safe failure screen with a "Retry Payment" option only while the original Order remains eligible and unexpired.
 
 ### Customer Cancellation Handling
 - When the customer clicks "Cancel" on PayHere or is redirected to `cancel_url`:
   - `Payment.status` transitions to `cancelled`.
   - The associated `Order` **remains `ORDER_CREATED`**.
-  - The customer is redirected to the checkout review page, allowing them to restart payment or select an alternative option without losing their assembled order.
+  - The customer is redirected to the checkout review page, allowing them to restart payment or select an alternative option without losing their assembled Order only while the original reservation remains unexpired.
 
 ### Abandoned Payment Handling
 - If a customer initiates payment, closes the browser, and never completes or cancels the transaction:
   - The `Payment` record remains in `pending` status.
-  - **Stale Session Timeout**: A payment attempt is considered stale after **30 minutes** (aligned with the checkout stock reservation expiry defined in ADR-003).
-  - Subsequent requests to `/api/v1/payments/initiate` for an order with a stale `pending` payment will automatically transition the stale payment to `cancelled` (with reason `session_expired`) before creating a fresh payment attempt.
-  - A lightweight backend background job sweeps any `ORDER_CREATED` orders that have expired without payment, releasing inventory and cancelling the order.
+  - **Stale Session Timeout**: An active attempt becomes stale when the Order's original **30-minute** reservation expires. No attempt-specific timeout extends that original deadline.
+  - A bounded, repeatable background job sweeps eligible genuinely unpaid `ORDER_CREATED` Orders whose original reservation deadline has elapsed.
+  - The expiry transaction moves the Order to `CANCELLED`, locally transitions eligible stale `pending` or `processing` PayHere attempts to `cancelled` with reason `session_expired`, and releases the exact reserved Inventory quantities at most once.
+  - Completed or refunded financial records and unresolved reconciliation holds are not overwritten or bypassed by expiry.
+  - The expired Order is terminal and cannot accept a replacement Payment attempt. Any later retry requires a fresh checkout and a new Order using current price and Inventory validation.
+  - ADR-003 governs atomic restoration of the expired Order's original selections to the owning Customer's Cart.
 
 ---
 
@@ -399,13 +412,16 @@ Payment gateways automatically retry webhooks if network latency delays the merc
 | Verified Payment Event | Source Status | Target Order Status | Order Lifecycle Role |
 |---|---|---|---|
 | Payment Initiated | `pending` | `ORDER_CREATED` | Order remains created; awaiting payment verification. |
-| Payment Failed | `failed` | `ORDER_CREATED` | Order remains created; customer may retry payment. |
-| Payment Cancelled | `cancelled` | `ORDER_CREATED` | Order remains created; customer may retry payment. |
+| Payment Failed | `failed` | `ORDER_CREATED` | Order remains created; customer may retry payment only before the original deadline. |
+| Payment Cancelled | `cancelled` | `ORDER_CREATED` | Order remains created; customer may retry payment only before the original deadline. |
 | **Payment Verified (`completed`)** | **`completed`** | **`PROCESSING`** | **Authoritative trigger**: Confirms financial settlement; shop staff begins order fulfillment. |
+| Eligible unpaid reservation expired | Eligible stale attempt -> `cancelled` (`session_expired`) | `CANCELLED` | Original reservation ends; Inventory and eligible Cart state are restored atomically and at most once. |
 | Order Cancelled by Staff/Customer | Any non-terminal | `CANCELLED` | Order cancelled; pending payment invalidated; stock returned. |
 
 - An `Order` in `ORDER_CREATED` **never** transitions to `PROCESSING` until a cryptographically verified `Payment.status === 'completed'` is recorded.
 - The frontend must never show an order as "Confirmed / Paid" solely because an `Order` document exists.
+- Retry wording in the failed and cancelled rows applies only while the original Order remains within its fixed 30-minute reservation window. After genuine expiry, the customer must create a new Order through fresh checkout.
+- A delayed, verified provider success received after the old Order has expired must be retained as financial and reconciliation evidence. It must not revive the terminal `CANCELLED` Order, deduct Inventory again, or create a second paid Order automatically.
 
 ### Coordination with Loyalty Points Model (ADR-005)
 
@@ -642,6 +658,9 @@ Implementation belongs strictly to downstream development issues:
 - [x] Duplicate charge protection and idempotency strategy defined.
 - [x] Duplicate webhook callback handling defined.
 - [x] Failure, cancellation, and abandoned payment behaviours defined.
+- [x] Same-Order retry limited to the original unexpired reservation window.
+- [x] Expired-Order retry requires fresh checkout and a new Order.
+- [x] Expiry and late-success reconciliation safeguards defined.
 - [x] Order lifecycle coordination aligned with ADR-004.
 - [x] Checkout confirmation display boundary defined.
 - [x] Loyalty trigger boundary aligned with ADR-005.
@@ -666,3 +685,4 @@ Implementation belongs strictly to downstream development issues:
 | 2026-10-14 | Development Team | Approved | Architecture reviewed and agreed: PayHere provider selection, hosted checkout pattern, SAQ A PCI compliance, MD5 IPN verification, 1-to-1 completed payment constraint, Order lifecycle coordination (ORDER_CREATED -> PROCESSING), and manual refund scope. |
 | 2026-10-14 | Lead Architect | Approved | Validated against ADR-002, ADR-003, ADR-004, and ADR-005. Verified that secret management and safe logging rules satisfy project security baselines. |
 | 2026-10-14 | Client / Supervisor | Approved | Confirmed PayHere selection for Sri Lankan LKR transactions. Approved the decision to keep automated refund APIs out of Sprint 2 scope. ADR approved for Accepted status. |
+| Date not supplied | Development Team | Approved amendment | Same-Order payment retry is limited to the original unexpired 30-minute reservation. Genuine expiry cancels the unpaid Order; any later retry requires fresh checkout and a new Order. Approval evidence reference to be supplied before the documentation PR is submitted. |
