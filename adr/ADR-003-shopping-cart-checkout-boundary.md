@@ -380,17 +380,13 @@ Detailed inventory-decrement and stock-synchronization behaviour remains the res
 
 The approved SDS includes Payment functionality, but this ADR is limited to shopping-cart persistence and the transition from temporary Cart data to Order and OrderItem data.
 
-This ADR does not define the required sequencing between:
+Payment sequencing, payment authority, and the fixed 30-minute reservation-expiry policy are governed by accepted **ADR-011 - Secure Payment Gateway Integration and Payment Lifecycle Architecture**. This ADR does not redefine:
 
 - payment authorization or payment completion,
 - Order persistence,
 - Order confirmation.
 
-The approved requirements reviewed for DDP-036 do not provide enough information to select that business rule safely.
-
-Therefore, payment sequencing must be confirmed through the appropriate stakeholder/design decision and implemented through the dedicated payment and checkout issues.
-
-Until that decision is confirmed, implementation must not independently assume that:
+Implementation must not independently assume that:
 
 - an Order is confirmed before payment,
 - payment must always complete before Order creation,
@@ -437,6 +433,22 @@ The Cart must only be cleared after the backend confirms that checkout completed
 
 If checkout fails, the Cart remains available so the Customer can correct the issue and retry.
 
+### Automatic Cart Recovery After Eligible Unpaid Order Expiry
+
+As a team-approved amendment, when an eligible genuinely unpaid Order reaches its original reservation deadline and is automatically cancelled under ADR-011:
+
+- the backend restores the original Inventory references and quantities recorded by that Order's `OrderItem` records to the persisted Cart of the authenticated Customer who owns the Order;
+- existing Cart selections are preserved, and matching Inventory references are merged without duplicate lines or quantities that exceed the supported Cart limits;
+- Cart restoration, eligible Order cancellation, and Inventory restoration form one atomic operation, so either all required local changes commit or none commit;
+- the durable expiry/restoration guard ensures repeated jobs, retries, or multiple application instances cannot restore Inventory or Cart selections more than once;
+- restoration records purchase intent only: the Cart does not reserve Inventory and restored selections do not preserve or make authoritative the old Order prices;
+- a later checkout must revalidate current Inventory availability, permitted quantities, and authoritative prices before it creates a new Order;
+- paid Orders and Orders with unresolved reconciliation holds are not automatically restored to the Cart;
+- staff-initiated cancellation and unrelated cancellation workflows do not trigger this automatic Cart recovery; and
+- Customer ownership and all existing server-side Cart validation, checkout transaction, and rollback guarantees remain authoritative.
+
+If exact original Inventory references or quantities are unavailable, the system must not guess, silently partially restore, or claim successful Cart recovery.
+
 ---
 
 ## 18. SRS and SDS References
@@ -476,7 +488,7 @@ DDP-036 must not implement:
 - inventory decrement logic,
 - payment integration.
 
-Payment sequencing and payment lifecycle rules are also outside the decision scope of DDP-036 and require the separately approved payment architecture or stakeholder clarification.
+Payment sequencing and payment lifecycle rules remain outside the decision scope of DDP-036 and are governed by accepted ADR-011.
 
 Those changes must be completed in their dedicated Sprint 2 implementation issues after this ADR is Accepted.
 
@@ -489,6 +501,7 @@ Those changes must be completed in their dedicated Sprint 2 implementation issue
 | 2026-10-05 | Development Team | Agreed | Hybrid authenticated cart architecture selected. Only authenticated CUSTOMER users may use cart functionality. Empty carts are not persisted. |
 | 2026-10-07 | thiruniimasha | Approved | Peer review completed. Previous checkout atomicity blocker and review suggestions were addressed; no blocking issues remain. |
 | — | — | Supervisor | Pending | — |
+| Date not supplied | Development Team | Approved amendment | Eligible genuinely unpaid automatic expiry restores the original Inventory selections and quantities to the owning Customer's Cart atomically and at most once. Approval evidence reference to be supplied before the documentation PR is submitted. |
 
 ---
 
@@ -507,4 +520,5 @@ OSMS will implement a **hybrid authenticated shopping cart**.
 - Failed checkout preserves the Cart.
 - Persisted Cart ownership comes from the authenticated JWT and Cart items persist only the required product/inventory reference and requested quantity.
 - Checkout persistence must behave as an all-or-nothing operation; partial Order, OrderItem, inventory, or Cart state must not be exposed as successful checkout.
-- Payment sequencing is not decided by this ADR and requires the separately approved payment architecture / stakeholder clarification.
+- Payment sequencing and fixed reservation-expiry rules are governed by accepted ADR-011.
+- Eligible genuinely unpaid automatic expiry restores original Order selections to the owning Customer's Cart atomically and at most once; fresh checkout revalidates current Inventory and prices.
