@@ -33,7 +33,7 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 | ADR-009 | Appointment Communication and Automated Reminder Scope Decision | [`adr/ADR-009-appointment-communication-policy.md`](adr/ADR-009-appointment-communication-policy.md) | Accepted |
 | ADR-010 | AI Chatbot Architecture and Knowledge Strategy | [`adr/ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md`](adr/ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md) | Accepted |
 | ADR-011 | Secure Payment Gateway Integration and Payment Lifecycle Architecture | [`adr/ADR-011-secure-payment-gateway-integration.md`](adr/ADR-011-secure-payment-gateway-integration.md) | Accepted |
-| ADR-012 | Authoritative Immutable Audit-Trail Architecture | [`adr/ADR-012-immutable-audit-trail-architecture.md`](adr/ADR-012-immutable-audit-trail-architecture.md) | Proposed |
+| ADR-012 | Authoritative Immutable Audit-Trail Architecture | [`adr/ADR-012-immutable-audit-trail-architecture.md`](adr/ADR-012-immutable-audit-trail-architecture.md) | Accepted |
 
 ### Development Standards
 
