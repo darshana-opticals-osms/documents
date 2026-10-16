@@ -108,6 +108,13 @@ In accordance with SDS Section 3.2, **Amazon SES** is the authoritative external
 ### 7.3 Decoupling from Appointment Reminders
 Per ADR-009, appointment communication is manual for staff. Order notifications **do not** interact with or depend on appointment reminder services, cron jobs, or models. Reusable AWS SDK client configuration is shared at the infrastructure library layer (`libs/aws/sesClient.js`) without coupling domain business logic.
 
+### 7.4 Transport Library and Existing Email Infrastructure Reuse (Nodemailer)
+To uphold the DRY (Don't Repeat Yourself) principle and maintain architectural consistency across backend services:
+- The backend implementation **reuses the existing shared email utility (built on `nodemailer`)**, which already governs transactional communications for password resets and order cancellation/refund notices.
+- Developers must not introduce redundant email libraries (e.g., SendGrid, Mailgun) or bespoke HTTP email clients.
+- In local development and automated CI testing, `nodemailer` routes messages through local test mocks, Mailtrap, or terminal logging without transmitting live customer emails.
+- In staging and production environments, `nodemailer` integrates directly with AWS SES (via AWS SES SMTP transport or the `@aws-sdk/client-ses` adapter), allowing environment-driven provider configuration exclusively through `.env` variables without altering core notification logic.
+
 ---
 
 ## 8. Delivery Architecture Evaluation and Decision
