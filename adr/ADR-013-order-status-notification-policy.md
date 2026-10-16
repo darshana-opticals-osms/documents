@@ -61,9 +61,9 @@ OSMS strictly adheres to the canonical Order lifecycle defined in **ADR-004**. N
 |---|---|---|---|---|---|
 | `*` | `ORDER_CREATED` | Order checkout finalized; stock reserved (awaiting payment). | **No** | N/A | For online checkout, payment is pending. Sending an email before payment capture creates confusion if the customer abandons or cancels payment within the 30-minute reservation window. |
 | `ORDER_CREATED` | `PROCESSING` | Verified payment confirmed via PayHere IPN (ADR-011) or staff POS confirmation. | **Yes** (Milestone 1) | Email (AWS SES) | **Order Confirmation & Receipt**: Confirms payment receipt, order number, items purchased, and fulfillment initiation. |
-| `PROCESSING` | `READY_FOR_PICKUP` | Optical workshop / branch staff complete lens cutting, mounting, and QA. | **Yes** (Milestone 2) | Email (AWS SES) | **Action Required**: Alerts customer that their glasses are assembled and ready for collection at the assigned branch, including branch hours and address. |
-| `READY_FOR_PICKUP` | `PICKED_UP` | Customer physically collects order at branch counter. | **No** | N/A | Frontline counter interaction; customer is physically present at the shop and receives paper receipt/glasses. Immediate email is redundant. |
-| `PICKED_UP` | `COMPLETED` | Order finalized and closed out in system. | **Yes** (Milestone 3) | Email (AWS SES) | **Fulfillment Complete**: Formal closing notification thanking the customer, providing digital order summary, and warranty/care instructions. |
+| `PROCESSING` | `READY_FOR_PICKUP` | Optical workshop / branch staff complete lens cutting, mounting, and packaging. | **No** | N/A | **Internal Fulfillment Stage**: Online orders are shipped via courier. At this stage, the package is awaiting courier pickup at the workshop/shop. External customer dispatch has not occurred yet. |
+| `READY_FOR_PICKUP` | `PICKED_UP` | External delivery service / courier partner collects package from shop for transit. | **Yes** (Milestone 2) | Email (AWS SES) | **Order Dispatched / On the Way**: Alerts customer that their order has been handed to the delivery courier and is in transit to their designated shipping address. |
+| `PICKED_UP` | `COMPLETED` | Delivery fulfilled; customer receives order. | **Yes** (Milestone 3) | Email (AWS SES) | **Fulfillment Complete**: Formal closing notification thanking the customer, providing digital order summary, and warranty/care instructions. |
 | `ORDER_CREATED` | `CANCELLED` | Payment reservation expired (30-min window) or explicit customer cancellation. | **Yes** (Milestone 4) | Email (AWS SES) | **Cancellation Notice**: Informs customer that the pending order was cancelled and inventory reservation was released. |
 | `PROCESSING` | `CANCELLED` | Managerial exception / stock defect cancellation after payment. | **Yes** (Milestone 5) | Email (AWS SES) | **Critical Exception**: Alerts customer of cancellation, reason, and offline refund reconciliation processing. |
 
@@ -181,7 +181,7 @@ To support operational delivery monitoring, debugging, and duplicate suppression
   "orderId": "<ObjectId — ref: Order>",
   "customerId": "<ObjectId — ref: Customer>",
   "recipientEmail": "<string — e.g. 'c***@example.com'>",
-  "triggerStatus": "<string — e.g. 'READY_FOR_PICKUP'>",
+  "triggerStatus": "<string — e.g. 'PICKED_UP'>",
   "idempotencyKey": "<string — unique index>",
   "channel": "EMAIL",
   "deliveryStatus": "<string — 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED'>",
@@ -229,8 +229,8 @@ This schema intentionally stores only delivery metadata. Full raw email HTML bod
 Order emails must strictly contain the minimum operational information required for customer clarity:
 - Customer friendly name (first name).
 - Order reference code (e.g., `ORD-2026-1014-001`).
-- Human-readable order status update (e.g., *"Your glasses are assembled and ready for collection"*).
-- Assigned branch name, address, and operating hours (for `READY_FOR_PICKUP`).
+- Human-readable order status update (e.g., *"Your order has been dispatched and is on the way to your delivery address"*).
+- Delivery shipping address summary (masked e.g., Street/City).
 - Secure link to the web tracking portal: `https://darshanaopticals.lk/orders/:id/track`.
 
 ### 13.2 Strictly Prohibited Content
