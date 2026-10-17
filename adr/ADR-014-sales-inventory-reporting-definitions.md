@@ -6,7 +6,7 @@ Authoritative Business Reporting Semantics, Deterministic Metrics Formulas, Inve
 
 ## 2. Status
 
-**Proposed** — Drafted to establish canonical sales and inventory reporting semantics, deterministic metric formulas, and privacy-compliant access controls under Issue #21.
+**Accepted** — Formally approved through architectural peer review, team consensus, and project supervisor confirmation on 2026-10-17. Ready for backend and frontend reporting implementation.
 
 ---
 
