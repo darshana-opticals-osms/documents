@@ -35,6 +35,7 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 | ADR-011 | Secure Payment Gateway Integration and Payment Lifecycle Architecture | [`adr/ADR-011-secure-payment-gateway-integration.md`](adr/ADR-011-secure-payment-gateway-integration.md) | Accepted |
 | ADR-012 | Authoritative Immutable Audit-Trail Architecture | [`adr/ADR-012-immutable-audit-trail-architecture.md`](adr/ADR-012-immutable-audit-trail-architecture.md) | Accepted |
 | ADR-013 | Authoritative Order-Status Notification Policy | [`adr/ADR-013-order-status-notification-policy.md`](adr/ADR-013-order-status-notification-policy.md) | Accepted |
+| ADR-014 | Authoritative Sales and Inventory Reporting Definitions, Metrics, and Access Policy | [`adr/ADR-014-sales-inventory-reporting-definitions.md`](adr/ADR-014-sales-inventory-reporting-definitions.md) | Accepted |
 
 ### Development Standards
 
@@ -65,7 +66,8 @@ documents/
 │   ├── ADR-010-ai-chatbot-architecture-and-knowledge-strategy.md
 │   ├── ADR-011-secure-payment-gateway-integration.md
 │   ├── ADR-012-immutable-audit-trail-architecture.md
-│   └── ADR-013-order-status-notification-policy.md
+│   ├── ADR-013-order-status-notification-policy.md
+│   └── ADR-014-sales-inventory-reporting-definitions.md
 └── README.md
 ```
 
