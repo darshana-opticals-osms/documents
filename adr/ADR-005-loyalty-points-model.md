@@ -10,9 +10,9 @@ Loyalty Points Calculation and Persistence Model for OSMS
 
 Approved through peer review and supervisor sign-off on 2026-10-05.
 
-### Proposed amendment status
+### Amendment status
 
-The rounding convention, current partial-refund implementation scope, and legacy Customer balance policy added below are **proposed amendments pending formal approval**. The ADR's existing Accepted decisions and historical approval record remain unchanged. These amendments must not be represented as approved until review evidence is recorded.
+The rounding convention, current partial-refund implementation scope, and legacy Customer balance policy added below were approved by PR reviewer `KavinduAmalka` in Documents PR [#41](https://github.com/darshana-opticals-osms/documents/pull/41) and merged into `develop` on 2026-10-17. This records PR review approval only and does not claim a new supervisor or stakeholder approval. The ADR's existing Accepted decisions and historical approval record remain unchanged.
 
 ## 3. Context
 
@@ -129,7 +129,7 @@ Important precision:
 - A value with more than two decimal places must be bounded deterministically to two decimal places using a defined decimal-rounding convention at the business/data-contract level.
 - Binary floating-point arithmetic must not be treated as the authoritative financial calculation without explicit decimal-safe handling.
 
-#### Proposed rounding clarification (pending approval)
+#### Approved rounding clarification
 
 The earning formula remains:
 
@@ -298,13 +298,13 @@ This option best matches the expected operational needs for OSMS.
 
 ## 8. Selected Architectural Direction
 
-This ADR proposes Option C:
+This ADR selects Option C:
 
 **Customer balance + dedicated loyalty transaction/history**
 
-This is a proposed architectural direction for review. It is not yet Accepted.
+This is the accepted persistence architecture: the current loyalty balance is stored on the Customer, a dedicated `LoyaltyTransaction` ledger stores history, and atomic transactional updates preserve balance/history consistency.
 
-The proposed rationale is:
+The rationale is:
 
 - fast balance retrieval for customer display
 - auditable history for Branch Manager review
@@ -328,7 +328,7 @@ Customer records may include a loyalty-balance field representing the current co
 
 This field is intended for fast customer-facing reads and efficient management overview.
 
-#### 9.1.1 Proposed legacy Customer balance policy (pending approval)
+#### 9.1.1 Legacy Customer balance policy
 
 - New Customers initialize their loyalty balance to `0.00`.
 - Existing Customers whose loyalty balance is missing or `null` must not be assigned zero automatically because their historical entitlement is not yet authoritative.
@@ -502,7 +502,7 @@ Example conceptually:
 
 The reversal must reflect only the refunded eligible portion and not the non-refunded portion.
 
-#### Current Sprint 2 implementation scope (proposed clarification — pending approval)
+#### Current Sprint 2 implementation scope
 
 The proportional reversal rule above remains the future business requirement. It is distinct from the current implementation scope:
 
@@ -646,7 +646,7 @@ The following remain out of scope unless explicitly approved:
 - tier-specific discounts or offers
 - additional promotional redemption rules
 
-If future redemption implementation deducts points, the proposed Option C model supports auditable negative transactions by storing the deduction as a transaction/event with an opposite signed delta.
+If future redemption implementation deducts points, the accepted Option C model supports auditable negative transactions by storing the deduction as a transaction/event with an opposite signed delta.
 
 ## 22. Tiered Loyalty Program Scope
 
@@ -762,7 +762,7 @@ This ADR does not claim that ADR-003 or ADR-004 already exist in the merged repo
 | 2026-10-04 | thiruniimasha | Peer Reviewer | Approved | Peer review completed; non-blocking clarifications incorporated. |
 | 2026-10-05 | Project Supervisor | Supervisor | Approved | Formal supervisor review completed and approved. |
 | 2026-10-12 | Development Team | Approved | Aligned roles with ADR-002: updated business oversight to `BRANCH_MANAGER` and replaced legacy cashier role with `BRANCH_ASSISTANT`. |
-| Pending | — | Amendment review | Proposed / Pending approval | Clarifies `ROUND_HALF_UP`, Sprint 2 partial-refund scope, and legacy Customer balance handling to align the ADR with DDP-057 implementation boundaries. |
+| 2026-10-17 | KavinduAmalka | PR Reviewer | Approved | Documents PR [#41](https://github.com/darshana-opticals-osms/documents/pull/41) approved and merged; confirms `ROUND_HALF_UP`, Sprint 2 full-refund-only scope with deferred partial refunds, and legacy Customer balance handling. No new supervisor or stakeholder approval is claimed. |
 
 Peer review and supervisor approval have been completed and this ADR is Accepted.
 
