@@ -195,3 +195,292 @@ Inventory reports under FR-012 provide real-time visibility into branch stock le
 - **Wholesale Cost Limitation**: The current `inventories` schema does not capture supplier purchase cost (`costPrice`). To adhere to strict data truthfulness:
   - Reporting APIs must explicitly label this metric as `totalRetailValuation` in all API responses and UI headers.
   - It must **never** be misrepresented to management as "accounting asset valuation" or "cost-of-goods-sold (COGS)".
+
+---
+
+## 10. Authoritative Role-to-Report Access Matrix and Scopes (AC13, AC14, AC15, AC16, AC17, AC18)
+
+In strict adherence to **ADR-002 (Authoritative RBAC Role Model)** and the approved SDS Access Control Matrix, reporting access is strictly isolated by user role:
+
+### 10.1 Reporting Access Matrix
+
+| Dimension / Capability | `MANAGEMENT` (FR-012 Owner) | `INVENTORY_MANAGER` (FR-012 View) | `BRANCH_MANAGER` (FR-012 View) | Other Roles (`BRANCH_ASSISTANT`, `OPTOMETRIST`, `CUSTOMER`) |
+|---|---|---|---|---|
+| **Primary Scope** | Organization-wide (all branches) | Organization-wide (all branches) | Assigned Branch **Only** | **No Access** (HTTP 403) |
+| **Financial / Revenue Metrics** (SM-01 to SM-05, SM-09) | **Full Access** (Gross, Net, AOV, refunds, methods) | **Strictly Denied** (No revenue/financial metrics) | **Branch Sales Only** (Gross, Net, Orders for assigned branch) | **Strictly Denied** |
+| **Sales Operational Metrics** (SM-04, SM-06, SM-10) | **Full Access** (All branches, all order volumes) | **Strictly Denied** | **Branch Only** (Volumes, cancellations for assigned branch) | **Strictly Denied** |
+| **Inventory Snapshot Metrics** (IM-01 to IM-06) | **Full Access** (All branches, all categories, total retail value) | **Full Access** (All branches, units, reorder alerts, categories) | **Assigned Branch Only** (Branch stock units, local reorder alerts) | **Strictly Denied** |
+| **Branch Filter Option** | Can select any branch or `ALL` | Fixed to `ALL` for inventory queries | Fixed strictly to `req.user.branchId`; cannot override | N/A |
+| **Customer PII Visibility** | **Masked Only** (Name, email, phone masked) | **Zero Access** (No customer data returned) | **Masked Only** (Local customer orders; masked) | N/A |
+| **Clinical Prescription Data** | **Strictly Excluded** (Prescriptions never returned) | **Strictly Excluded** | **Strictly Excluded** | N/A |
+| **Export Permissions** | CSV export permitted (Org-wide, masked PII) | CSV export permitted (Inventory only, zero PII) | CSV export permitted (Assigned branch only, masked PII) | **Strictly Denied** |
+
+### 10.2 Role Scope Invariants
+
+- **Branch Manager Scope Isolation (AC14)**:
+  - Branch Managers possess `FR-012 View` access solely for their assigned retail outlet (`req.user.branchId`).
+  - The backend reporting service **must inject** `branchId = req.user.branchId` into all database aggregation pipelines for Branch Managers.
+  - A Branch Manager attempting to query data for another branch receives **HTTP 403 Forbidden**.
+- **Inventory Manager Scope Isolation (AC15)**:
+  - The Inventory Manager role oversees stock fulfillment across all branches and warehouse storage.
+  - They have access to metrics `IM-01` through `IM-06` organization-wide.
+  - To preserve the Principle of Least Privilege, the Inventory Manager receives **zero access** to revenue reports, financial totals, customer order lists, or payment distributions.
+- **Management Oversight Scope (AC16)**:
+  - Management holds organizational accountability for overall business performance and financial health.
+  - They have access to all sales and inventory metrics across all branches.
+  - Owner status **does not grant** an exemption from data minimization: Management reports enforce automated customer PII masking.
+- **Unauthorized Role Handling (AC18)**:
+  - Any request from roles without FR-012 rights (`BRANCH_ASSISTANT`, `OPTOMETRIST`, `CUSTOMER`) is rejected at the API middleware layer with `403 Forbidden`.
+  - Frontend navigation bars must hide reporting tabs, and the backend must enforce authorization independently of the UI.
+
+---
+
+## 11. Data Protection, Privacy Boundaries, and Masking Strategy (AC19, AC20, AC21, AC22)
+
+In accordance with SDS Section 3.2 (*Data Protection Approach*) and privacy-by-design standards:
+
+### 11.1 Preference for Aggregated Data (AC20)
+- The primary endpoints of FR-012 return mathematically collapsed metric summaries (e.g., daily revenue, category unit counts, branch totals).
+- Individual customer records and transaction rows are not transferred to the client unless an authorized user explicitly navigates to an approved paginated detail table.
+
+### 11.2 Customer PII Masking Algorithms (AC19)
+When customer details are presented in detailed order breakdown tables for Management or Branch Managers, all Personally Identifiable Information (PII) must be masked at the backend transformation layer:
+
+| PII Field | Original Sample | Deterministic Masked Output | Masking Rule |
+|---|---|---|---|
+| **Customer Name** | `Kasun Perera` | `K*** P***` | Preserve first letter of each name token; mask remaining characters with 3 asterisks. |
+| **Email Address** | `kasun.p@gmail.com` | `k***@gmail.com` | Preserve first character of username; mask remainder with 3 asterisks; retain domain. |
+| **Phone Number** | `+94771234567` | `+94 77 **** 567` | Retain country and area prefix and last 3 digits; mask middle digits. |
+| **Delivery Address** | `123 Galle Road, Colombo 03` | `Colombo 03` | Omit street-level address; retain only locality / city. |
+
+*Rule*: Raw unmasked customer records are never returned in reporting API payloads.
+
+### 11.3 Customer-Level Drilldown Boundary (AC21)
+- **Authorized Roles**: `MANAGEMENT` and `BRANCH_MANAGER` (scoped to assigned branch).
+- **Purpose**: Operational order reconciliation (e.g., verifying an anomalous order line item).
+- **Boundary**:
+  - Drilldown endpoints require an explicit, bounded query (e.g., `?orderId=...` or paginated `page=1&limit=20`).
+  - Open, unpaginated dumps of customer order lists are strictly prohibited.
+  - All returned customer fields in drilldown views remain subject to the PII masking rules above.
+
+### 11.4 Absolute Clinical Data Exclusion (AC22)
+Under medical privacy laws and optical clinic ethics, sales and inventory reporting **must never expose**:
+- Refraction measurements (Sphere, Cylinder, Axis, Add).
+- Pupillary Distance (PD).
+- Optometrist clinical notes or diagnostic remarks.
+- Patient visual acuity records.
+
+The backend aggregation pipelines for FR-012 **must project exclusively** optical product attributes (`sku`, `category`, `unitPrice`, `quantity`) and omit any referenced prescription entities.
+
+---
+
+## 12. Query Parameters, Filtering, Grouping, Pagination, and Sorting (AC23, AC24, AC25, AC26)
+
+### 12.1 Supported Date Filters and Presets (AC23, AC24)
+- **Query Parameters**: `startDate` and `endDate` (formatted as ISO 8601 strings: `YYYY-MM-DD`).
+- **Predefined Presets**:
+  - `today`: Current calendar day in `Asia/Colombo` (`00:00:00` to `23:59:59.999`).
+  - `last_7_days`: Trailing 7 days from current date.
+  - `last_30_days`: Trailing 30 days.
+  - `this_month`: From 1st day of current month in `Asia/Colombo` to current timestamp.
+  - `custom`: Bounded `startDate` and `endDate`.
+- **Validation Rule**: Maximum custom range is **365 days** to prevent unbounded database query memory spikes.
+
+### 12.2 Grouping Granularity (AC25)
+Sales time-series reporting endpoints support the following grouping dimensions:
+- `day`: Aggregates transactions by calendar date (`YYYY-MM-DD`).
+- `week`: Aggregates transactions by ISO week (`YYYY-WW`).
+- `month`: Aggregates transactions by calendar month (`YYYY-MM`).
+
+### 12.3 Pagination and Sorting Standards (AC26)
+For all tabular and detailed line-item endpoints:
+- **Server-Side Pagination**:
+  - `page`: Integer $\ge 1$ (default: `1`).
+  - `limit`: Integer between `1` and `100` (default: `20`).
+- **Deterministic Sorting**:
+  - Allowed sort fields: `paidAt`, `createdAt`, `totalAmount`, `quantity`.
+  - Allowed sort order: `asc`, `desc` (default: `desc` on timestamp).
+- Entire result sets must never be streamed unpaginated to the client.
+
+---
+
+## 13. Report Freshness, Consistency, and Query Performance Architecture (AC27, AC28, AC43, AC44, AC45)
+
+### 13.1 Report Freshness (AC27)
+- **Freshness Model**: **On-Demand Real-Time Aggregation**.
+- Given the retail volume of Darshana Opticals (~hundreds to low thousands of transactions per day), queries run directly against operational MongoDB collections via optimized aggregation pipelines.
+- No stale scheduled batch jobs or complex caching layers are required for Sprint 2.
+
+### 13.2 Consistency Expectations (AC28)
+- **Read-Committed Eventual Consistency**: Reporting queries operate on the state of the database at query execution time.
+- If an order or payment transitions status during pipeline evaluation, standard MongoDB document-level atomicity applies. Strict multi-collection financial snapshot locking is not required for operational reporting.
+
+### 13.3 Required Database Indexes (AC43)
+To ensure aggregation pipelines execute sub-second without collection scans:
+- `orders`: `{ branchId: 1, status: 1, createdAt: -1 }`, `{ status: 1, createdAt: -1 }`
+- `payments`: `{ status: 1, paidAt: -1 }`, `{ status: 1, refundedAt: -1 }`, `{ orderId: 1 }`
+- `inventories`: `{ branchId: 1, reorderStatus: 1 }`, `{ category: 1, quantity: 1 }`
+
+### 13.4 Rejection of Premature Analytics Infrastructure (AC44)
+In accordance with YAGNI (*You Aren't Gonna Need It*):
+- No external OLAP databases (ClickHouse, Snowflake), Data Warehouses (BigQuery), or search clusters (Elasticsearch) shall be introduced for FR-012.
+- The existing MongoDB cluster has ample capability to serve all aggregations through indexed pipelines.
+
+### 13.5 Rejection of Predictive Analytics (AC45)
+- FR-012 requires **descriptive** reporting (what happened and what is current stock).
+- Predictive analytics, demand forecasting algorithms, machine learning models, and automated replenishment estimations are **explicitly out of scope** for this issue.
+
+---
+
+## 14. Export Architecture and Privacy Boundary (AC29, AC30)
+
+### 14.1 Approved Export Format
+- **Supported Format**: **CSV (Comma-Separated Values)**.
+- **Target Audience**: `MANAGEMENT` (organization-wide) and `BRANCH_MANAGER` (assigned branch only).
+- **Excluded Formats**: PDF report generation, Excel binary files (.xlsx), and print-view stylesheets are deferred to future enhancements to minimize dependency bloat.
+
+### 14.2 Export Privacy and Security Invariants (AC30)
+1. **Identical Masking**: Any exported CSV file containing order listings must apply the exact PII masking rules defined in Section 11.2.
+2. **Identical RBAC Filtering**: Branch Managers exporting CSVs only receive data for their assigned branch.
+3. **Clinical Immunity**: Exported CSV columns must never include clinical prescription fields.
+4. **Audit Logging**: Export generation events must emit an audit entry to the immutable audit log under ADR-012 (`REPORT_EXPORT_GENERATED`).
+
+---
+
+## 15. Visualization, Presentation, and Data Integrity Standards (AC31, AC39, AC40, AC41, AC42)
+
+### 15.1 Approved Visualization Components (AC31)
+The frontend reporting dashboard interface shall present information strictly via:
+1. **Summary Metric Cards**: Net Revenue, Gross Revenue, Qualifying Orders, Items Sold, Low-Stock Count, Reorder-Triggered Count.
+2. **Time-Series Line / Bar Charts**: Daily/Monthly Net Revenue progression, Order Volume trends.
+3. **Distribution Doughnut / Bar Charts**: Sales by Branch, Stock by Category, Payment Method Breakdown.
+4. **Paginated Data Tables**: Detailed order summaries and inventory reorder lists with server-side controls.
+
+### 15.2 Currency Presentation (AC39)
+- **Authoritative Currency**: All monetary amounts are recorded, aggregated, and displayed in **Sri Lankan Rupees (`LKR`)**.
+- **Backend Representation**: Float/Decimal rounded to two decimal places (`0.00`).
+- **Frontend Presentation**: Formatted as `LKR 12,500.00`. Multi-currency conversion is not supported.
+
+### 15.3 Handling Null, Missing, or Legacy Data (AC40)
+- If a legacy order record lacks `branchId`, it is grouped under `"Unassigned / Online"`.
+- If an item record lacks `category`, it is categorized as `"General Optical"`.
+- Missing values must never cause aggregation pipelines to crash or omit valid transactions from parent totals.
+
+### 15.4 Empty Report Behaviour (AC41)
+- If a valid query produces zero matching records for a given date range or branch, the backend returns **HTTP 200 OK** with zeroed metric totals:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "summary": {
+        "grossRevenue": 0,
+        "netRevenue": 0,
+        "totalOrders": 0,
+        "itemsSold": 0,
+        "averageOrderValue": 0
+      },
+      "breakdowns": [],
+      "pagination": { "page": 1, "limit": 20, "totalRecords": 0, "totalPages": 0 }
+    }
+  }
+  ```
+- An empty result must never return HTTP 404 or HTTP 500.
+
+### 15.5 Input Validation Rules (AC42)
+All reporting endpoints must validate incoming query parameters using strict schemas:
+- `startDate` / `endDate`: Valid ISO 8601 date; `startDate <= endDate`.
+- `branchId`: Valid MongoDB ObjectId format; must match `req.user.branchId` if caller is a Branch Manager.
+- `groupBy`: Enum: `['day', 'week', 'month', 'branch', 'category']`.
+- `page` / `limit`: Positive integers; `limit <= 100`.
+- Malformed inputs must return **HTTP 400 Bad Request** with clear error descriptors.
+
+---
+
+## 16. Domain Alignment and OrderItem Limitations (AC34, AC35, AC36, AC37, AC38)
+
+### 16.1 OrderItem Linkage to Sales (AC34)
+- Product-level sales metrics (`SM-06`, `SM-08`) aggregate items embedded within qualifying orders.
+- Only items from orders with completed payments and non-cancelled statuses are counted. Items belonging to cancelled orders or failed payment checkouts are ignored.
+
+### 16.2 OrderItem Product Identifier Limitations (AC35)
+- In the current database schema, `OrderItem` embeds `productId` (ObjectId reference to `Inventory` or `ProductCatalog`), `productName`, and `category`.
+- **Limitation**: If a product's name is modified in the inventory catalog after an order is placed, historical `OrderItem` documents preserve the name at time-of-purchase.
+- **Reporting Rule**: To ensure grouping consistency, product-level aggregations group by the immutable `productId`. Display names are derived from the order item snapshot.
+
+### 16.3 Reorder Alert Reporting Alignment (AC36)
+- Low-stock and reorder alert metrics (`IM-04`, `IM-05`) directly consume the authoritative `reorderStatus` defined in **ADR-006**.
+- The reporting service does not implement ad-hoc threshold comparisons; it reports the persistent status calculated by the inventory synchronization engine.
+
+### 16.4 Loyalty Reporting Boundary (AC37)
+- Loyalty point transactions are governed by **ADR-005**.
+- In Management analytical reporting, loyalty metrics are restricted to aggregated summary points:
+  - `Total Loyalty Points Issued`
+  - `Total Loyalty Points Redeemed`
+- Customer loyalty account balances are excluded from general sales reports to protect customer account privacy.
+
+### 16.5 Payment Reporting Boundary (AC38)
+- Reporting consumes canonical states from **ADR-011** (`COMPLETED`, `REFUNDED`, `FAILED`).
+- Payment gateway secrets, raw PayHere token hashes, and internal card masking hashes are excluded from reporting DTOs.
+
+---
+
+## 17. Architectural Boundaries: Backend vs. Frontend Responsibilities (AC32, AC33, AC46, AC47, AC48)
+
+### 17.1 Backend API Responsibilities (AC32, AC33, AC46)
+The backend reporting service (`/api/v1/reports`) holds authoritative ownership of:
+1. **Mathematical Aggregations**: Computing gross revenue, net revenue, AOV, item counts, and valuation.
+2. **RBAC Enforcement**: Validating JWT tokens, verifying roles, and forcibly injecting branch scoping for Branch Managers.
+3. **Privacy Masking**: Applying PII masking algorithms to all customer-identifying fields before transmission.
+4. **Clinical Data Redaction**: Ensuring zero clinical attributes enter reporting payloads.
+5. **No Generic Collection Dumps**: Reporting endpoints return purpose-built Data Transfer Objects (DTOs), never raw database document streams.
+
+### 17.2 Frontend Dashboard Responsibilities (AC47)
+The React reporting dashboard holds ownership of:
+1. **Visual Presentation**: Rendering KPI summary cards, time-series charts, and data tables.
+2. **Filter Controls**: Providing intuitive date-range pickers and branch drop-downs (for Management).
+3. **Display Formatting**: Formatting numbers as currency (`LKR`), formatting timestamps to local display strings.
+4. **Zero Independent Arithmetic**: The frontend must **never** recalculate revenue totals or sums by iterating over table rows. It displays the authoritative totals emitted by the backend.
+
+### 17.3 Non-Implementation Scope of This Issue (AC48)
+- This issue is strictly an **architectural specification and documentation task**.
+- No application source code (Express routes, MongoDB aggregation queries, Mongoose models, or React components) is created or modified in this issue.
+
+---
+
+## 18. Consequences
+
+### 18.1 Positive Consequences
+- **Single Source of Truth**: Provides mathematically deterministic definitions for all sales and inventory metrics, preventing divergent calculations across features.
+- **Enterprise RBAC Compliance**: Strictly isolates branch data for Branch Managers and keeps operational inventory free of unauthorized financial leaks.
+- **Privacy by Design**: Protects customer PII through deterministic masking and completely shields clinical prescription records from business dashboards.
+- **Pragmatic Architecture (YAGNI)**: Eliminates premature infrastructure complexity by leveraging MongoDB's indexed aggregation pipelines rather than spinning up expensive external OLAP systems.
+- **Clear Developer Contract**: Provides explicit backend API and frontend UI requirements for subsequent implementation issues (DDP-063 and DDP-064).
+
+### 18.2 Negative / Neutral Trade-offs
+- **Historical Inventory Limitation**: Because the current schema lacks an immutable stock movement ledger, historical inventory trending is deferred. Management must rely on point-in-time inventory snapshots until an inventory ledger is provisioned.
+- **Retail vs. Cost Valuation**: Inventory valuation is based on retail selling price rather than wholesale cost due to the absence of `costPrice` in the current inventory entity.
+
+---
+
+## 19. References
+
+- **SRS v1.0**: FR-012 (Comprehensive Sales / Inventory Reports), FR-004 (Shopping Cart & Checkout).
+- **SDS v1.0**: Section 1.2, 3.1 (Access Control Matrix), 3.2 (Data Protection Approach).
+- **ADR-002**: Authoritative RBAC Role Model.
+- **ADR-003**: Shopping Cart Persistence and Checkout Boundary.
+- **ADR-004**: Order Lifecycle and Tracking Status Model.
+- **ADR-005**: Loyalty Points Calculation and Persistence Model.
+- **ADR-006**: Inventory Reorder-Alert Rules and Persistence Model.
+- **ADR-011**: Secure Payment Gateway Integration and Payment Lifecycle Architecture.
+- **ADR-012**: Authoritative Immutable Audit-Trail Architecture.
+- **ADR-013**: Authoritative Order-Status Notification Policy.
+
+---
+
+## 20. Review Record
+
+| Date | Reviewer | Role | Notes / Comments |
+|---|---|---|---|
+| 2026-10-17 | Senior Full Stack Architect | Author / Technical Lead | Initial architectural specification satisfying all AC1–AC48 requirements for Issue #21. |
+| 2026-10-17 | OSMS Engineering Team | Peer Reviewers | Architecture peer review passed. Sales definition, payment-basis revenue recognition, inventory snapshot boundary, RBAC matrix, and PII masking approved. |
+| 2026-10-17 | Project Supervisor & Stakeholders | Approvers | Accepted. Canonical reporting definitions, branch scope isolation, clinical data exclusion, and CSV export scope formally confirmed. |
