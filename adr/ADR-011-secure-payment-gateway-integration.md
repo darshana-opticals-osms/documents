@@ -8,9 +8,9 @@ Secure Payment Gateway Integration, Payment Lifecycle, and Order Coordination Ar
 
 **Accepted** — Approved through peer review, team architectural alignment, and client stakeholder confirmation on 2026-10-14.
 
-### Proposed amendment status
+### Amendment status
 
-The loyalty-award lifecycle and partial-refund scope clarifications added below are **proposed amendments pending formal approval**. ADR-011's existing Accepted payment architecture and historical approval record remain unchanged. The amendments must not be represented as approved until review evidence is recorded.
+The loyalty-award lifecycle and partial-refund scope clarifications added below were approved by PR reviewer `KavinduAmalka` in Documents PR [#41](https://github.com/darshana-opticals-osms/documents/pull/41) and merged into `develop` on 2026-10-17. This records PR review approval only and does not claim a new supervisor or stakeholder approval. ADR-011's existing Accepted payment architecture and historical approval record remain unchanged.
 
 ---
 
@@ -703,4 +703,4 @@ Implementation belongs strictly to downstream development issues:
 | 2026-10-14 | Lead Architect | Approved | Validated against ADR-002, ADR-003, ADR-004, and ADR-005. Verified that secret management and safe logging rules satisfy project security baselines. |
 | 2026-10-14 | Client / Supervisor | Approved | Confirmed PayHere selection for Sri Lankan LKR transactions. Approved the decision to keep automated refund APIs out of Sprint 2 scope. ADR approved for Accepted status. |
 | Date not supplied | Development Team | Approved amendment | Same-Order payment retry is limited to the original unexpired 30-minute reservation. Genuine expiry cancels the unpaid Order; any later retry requires fresh checkout and a new Order. Approval evidence reference to be supplied before the documentation PR is submitted. |
-| Pending | — | Proposed / Pending approval | Corrects the loyalty lifecycle to award only when a verified-paid Order reaches `COMPLETED` and clarifies that proportional partial-refund reversal remains future approved work, consistent with ADR-005 and DDP-057. |
+| 2026-10-17 | KavinduAmalka | Approved | Documents PR [#41](https://github.com/darshana-opticals-osms/documents/pull/41) approved and merged; confirms loyalty awarding only when a verified-paid Order reaches `COMPLETED`, atomic and idempotent awarding, and the current full-refund-only scope with deferred partial refunds. No new supervisor or stakeholder approval is claimed. |
