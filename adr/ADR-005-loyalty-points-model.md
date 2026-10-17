@@ -10,6 +10,10 @@ Loyalty Points Calculation and Persistence Model for OSMS
 
 Approved through peer review and supervisor sign-off on 2026-10-05.
 
+### Proposed amendment status
+
+The rounding convention, current partial-refund implementation scope, and legacy Customer balance policy added below are **proposed amendments pending formal approval**. The ADR's existing Accepted decisions and historical approval record remain unchanged. These amendments must not be represented as approved until review evidence is recorded.
+
 ## 3. Context
 
 The OSMS customer-retention scope includes a loyalty program as part of the retail and customer-relationship model. The approved SRS and SDS identify loyalty as a business capability tied to customer purchases and management oversight.
@@ -124,6 +128,27 @@ Important precision:
 - Points are not rounded down to integers.
 - A value with more than two decimal places must be bounded deterministically to two decimal places using a defined decimal-rounding convention at the business/data-contract level.
 - Binary floating-point arithmetic must not be treated as the authoritative financial calculation without explicit decimal-safe handling.
+
+#### Proposed rounding clarification (pending approval)
+
+The earning formula remains:
+
+> earnedPoints = eligibleSpend / 100
+
+The proposed implementation convention is:
+
+- calculate the aggregated eligible merchandise spend using decimal-safe arithmetic
+- divide the aggregated eligible spend by 100
+- apply `ROUND_HALF_UP` exactly once to the calculated points value at two decimal places
+- store and return the result with exactly two decimal places
+- do not round individual Order Items before aggregation
+- preserve the merchandise eligibility and clinical-service exclusion rules in Sections 6.3 and 6.4
+
+Example at a two-decimal boundary:
+
+- aggregated eligible spend: LKR 100.50
+- unrounded points: 1.005
+- `ROUND_HALF_UP` result stored and returned: 1.01 points
 
 ### 6.2 Confirmed redemption rule
 
@@ -303,6 +328,14 @@ Customer records may include a loyalty-balance field representing the current co
 
 This field is intended for fast customer-facing reads and efficient management overview.
 
+#### 9.1.1 Proposed legacy Customer balance policy (pending approval)
+
+- New Customers initialize their loyalty balance to `0.00`.
+- Existing Customers whose loyalty balance is missing or `null` must not be assigned zero automatically because their historical entitlement is not yet authoritative.
+- The loyalty API returns a safe `409 Conflict` response until the historical balance is authoritatively reconciled.
+- Any migration or backfill requires verified source data and a separately approved migration procedure.
+- Documentation of this policy does not alter existing Customer balances or loyalty history.
+
 ### 9.2 Dedicated loyalty transaction/history record
 
 A dedicated loyalty event or transaction record should store the minimum required audit trail for each loyalty change.
@@ -468,6 +501,16 @@ Example conceptually:
 - reversal: 3.00 points
 
 The reversal must reflect only the refunded eligible portion and not the non-refunded portion.
+
+#### Current Sprint 2 implementation scope (proposed clarification — pending approval)
+
+The proportional reversal rule above remains the future business requirement. It is distinct from the current implementation scope:
+
+- Partial-refund processing is deferred from the current Sprint 2 implementation.
+- Current Payment APIs support approved full refunds only.
+- Full-refund loyalty reversal remains mandatory and is implemented.
+- Partial-refund processing and proportional loyalty reversal require a separate future approved implementation.
+- Partial-refund functionality must not be represented as currently implemented.
 
 ### 16.3 Post-payment cancellation workflow
 
@@ -719,6 +762,7 @@ This ADR does not claim that ADR-003 or ADR-004 already exist in the merged repo
 | 2026-10-04 | thiruniimasha | Peer Reviewer | Approved | Peer review completed; non-blocking clarifications incorporated. |
 | 2026-10-05 | Project Supervisor | Supervisor | Approved | Formal supervisor review completed and approved. |
 | 2026-10-12 | Development Team | Approved | Aligned roles with ADR-002: updated business oversight to `BRANCH_MANAGER` and replaced legacy cashier role with `BRANCH_ASSISTANT`. |
+| Pending | — | Amendment review | Proposed / Pending approval | Clarifies `ROUND_HALF_UP`, Sprint 2 partial-refund scope, and legacy Customer balance handling to align the ADR with DDP-057 implementation boundaries. |
 
 Peer review and supervisor approval have been completed and this ADR is Accepted.
 

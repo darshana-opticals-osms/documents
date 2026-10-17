@@ -8,6 +8,10 @@ Secure Payment Gateway Integration, Payment Lifecycle, and Order Coordination Ar
 
 **Accepted** — Approved through peer review, team architectural alignment, and client stakeholder confirmation on 2026-10-14.
 
+### Proposed amendment status
+
+The loyalty-award lifecycle and partial-refund scope clarifications added below are **proposed amendments pending formal approval**. ADR-011's existing Accepted payment architecture and historical approval record remain unchanged. The amendments must not be represented as approved until review evidence is recorded.
+
 ---
 
 ## 3. Context
@@ -64,7 +68,7 @@ Although the transactional entity exists, the approved SRS and SDS do not define
 10. System behaviour during payment failures, user cancellations, and abandoned checkout sessions.
 11. Two-way coordination between the `Payment` lifecycle and the `Order` lifecycle (ADR-004).
 12. Separation between checkout creation, payment completion, and final customer confirmation.
-13. Payment completion boundary for triggering automatic loyalty awards (ADR-005).
+13. Coordination boundary between verified payment completion and the later Order-`COMPLETED` loyalty award (ADR-005).
 14. Refund and partial-refund scope for Sprint 2.
 15. Management monitoring scope vs. customer ownership and data privacy.
 16. Secret management, audit logging boundaries, and safe mock testing strategies.
@@ -188,6 +192,7 @@ sequenceDiagram
     participant Backend as OSMS Backend
     participant PayHere as PayHere Gateway
     participant Bank as Issuing Bank
+    actor Staff
 
     Customer->>Frontend: Click "Proceed to Payment"
     Frontend->>Backend: POST /api/v1/payments/initiate { orderId }
@@ -204,12 +209,16 @@ sequenceDiagram
     Backend->>Backend: Verify Hash, Amount, Order State
     Backend->>Backend: Transition Payment -> completed
     Backend->>Backend: Transition Order -> PROCESSING
-    Backend->>Backend: Trigger Loyalty Award (ADR-005)
+    Backend->>Backend: Do not award loyalty yet
     Backend-->>PayHere: HTTP 200 OK
     PayHere->>Frontend: Redirect to return_url?order_id=...
     Frontend->>Backend: GET /api/v1/orders/:id/payment-status
     Backend-->>Frontend: Return Payment Status (completed)
     Frontend-->>Customer: Display Order Confirmation
+    Note over Staff,Backend: Later, after approved fulfillment
+    Staff->>Backend: Complete approved Order lifecycle
+    Backend->>Backend: Transition Order -> COMPLETED
+    Backend->>Backend: Award eligible loyalty points atomically and idempotently
 ```
 
 ---
@@ -318,10 +327,10 @@ stateDiagram-v2
 | From Status | To Status | Trigger / Condition | Side Effects |
 |---|---|---|---|
 | `pending` | `processing` | Customer opens gateway session / gateway notifies processing. | Audit log recorded. |
-| `pending` | `completed` | Verified PayHere IPN received with `status_code = 2` and matching hash/amount. | `Order` -> `PROCESSING`; Loyalty points awarded; Confirmation unlocked. |
+| `pending` | `completed` | Verified PayHere IPN received with `status_code = 2` and matching hash/amount. | `Order` -> `PROCESSING`; no loyalty award yet; confirmation unlocked. |
 | `pending` | `failed` | Verified PayHere IPN with `status_code = -2`, gateway rejection, or timeout. | Error logged; Order remains `ORDER_CREATED`; same-Order retry is permitted only before the original deadline. |
 | `pending` | `cancelled` | Customer aborts payment at gateway; returns via `cancel_url`. | Cancellation logged; Order remains `ORDER_CREATED`; same-Order retry is permitted only before the original deadline. |
-| `processing` | `completed` | Verified PayHere IPN with `status_code = 2`. | `Order` -> `PROCESSING`; Loyalty points awarded. |
+| `processing` | `completed` | Verified PayHere IPN with `status_code = 2`. | `Order` -> `PROCESSING`; no loyalty award yet. |
 | `processing` | `failed` | Verified PayHere IPN with `status_code = -2`. | Error logged; same-Order retry is permitted only before the original deadline. |
 | `processing` | `cancelled` | Gateway session cancelled. | Cancellation logged; same-Order retry is permitted only before the original deadline. |
 | `completed` | `refunded` | Authorized Management offline refund reconciliation. | Order updated; Loyalty reversed (ADR-005). |
@@ -371,7 +380,7 @@ Payment gateways automatically retry webhooks if network latency delays the merc
   3. Validate the signature.
   4. Log the duplicate notification as an informational audit event.
   5. Immediately return HTTP `200 OK` to satisfy the provider.
-  6. **Do NOT re-execute side effects**: do not re-transition the `Order`, do not re-calculate loyalty points, and do not duplicate customer notifications.
+  6. **Do NOT re-execute side effects**: do not re-transition the `Order`, do not attempt a loyalty award, and do not duplicate customer notifications. Loyalty earning remains tied to the later Order-`COMPLETED` event.
 
 ---
 
@@ -414,7 +423,7 @@ Payment gateways automatically retry webhooks if network latency delays the merc
 | Payment Initiated | `pending` | `ORDER_CREATED` | Order remains created; awaiting payment verification. |
 | Payment Failed | `failed` | `ORDER_CREATED` | Order remains created; customer may retry payment only before the original deadline. |
 | Payment Cancelled | `cancelled` | `ORDER_CREATED` | Order remains created; customer may retry payment only before the original deadline. |
-| **Payment Verified (`completed`)** | **`completed`** | **`PROCESSING`** | **Authoritative trigger**: Confirms financial settlement; shop staff begins order fulfillment. |
+| **Payment Verified (`completed`)** | **`completed`** | **`PROCESSING`** | **Payment boundary**: Confirms financial settlement; shop staff begins order fulfillment; no loyalty award occurs yet. |
 | Eligible unpaid reservation expired | Eligible stale attempt -> `cancelled` (`session_expired`) | `CANCELLED` | Original reservation ends; Inventory and eligible Cart state are restored atomically and at most once. |
 | Order Cancelled by Staff/Customer | Any non-terminal | `CANCELLED` | Order cancelled; pending payment invalidated; stock returned. |
 
@@ -425,8 +434,12 @@ Payment gateways automatically retry webhooks if network latency delays the merc
 
 ### Coordination with Loyalty Points Model (ADR-005)
 
-- Aligned with ADR-005 Section 6.7 and Section 20, loyalty points are calculated and awarded **exclusively upon confirmed financial settlement**.
-- **Trigger**: The backend IPN handler triggers the loyalty accrual service **only after** `Payment.status` successfully transitions to `completed` and the order moves to `PROCESSING`.
+- The verified PayHere IPN establishes successful financial settlement: `Payment.status` becomes `completed` and the Order moves to `PROCESSING`.
+- The payment callback does **not** award loyalty points.
+- Staff then completes the approved Order lifecycle under ADR-004.
+- The authoritative loyalty trigger occurs only when the paid Order reaches `COMPLETED`.
+- At Order completion, the backend calculates and awards eligible points from authoritative persisted data.
+- The Order-completion award must be atomic and idempotent so retries or concurrent observations cannot duplicate the award.
 - Loyalty points are **never** awarded based on frontend redirect URLs, unverified webhooks, or raw order creation.
 - The loyalty transaction records the `paymentId` and `providerTransactionId` for complete financial traceability.
 
@@ -484,9 +497,11 @@ OSMS strictly prohibits persisting:
   - The `Payment.status` enum contains `refunded` to support manual and administrative reconciliation.
   - If Management grants a customer refund, the refund is executed **manually through the PayHere Merchant Portal or direct corporate bank transfer**.
   - Authorized Management staff then records the administrative refund status in OSMS.
-  - Setting `refunded` triggers the loyalty reversal logic specified in ADR-005.
+  - For an approved full refund, setting `refunded` triggers the full-refund loyalty reversal specified in ADR-005.
 - **Partial Refunds**:
   - Partial refunds are **strictly OUT OF SCOPE** for Sprint 2. Any manual refund in Sprint 2 is treated as a full transaction reversal.
+  - ADR-005 retains proportional loyalty reversal as the business rule for a valid future partial refund, but partial-refund processing and its loyalty reversal require a separate approved implementation.
+  - Partial-refund functionality must not be represented as currently implemented.
 
 ---
 
@@ -559,7 +574,8 @@ graph TD
 
     C --> C1[Supertest Mock Webhooks / IPN]
     C --> C2[Verify Idempotency on Duplicate IPN]
-    C --> C3[Verify Order State & Loyalty Side Effects]
+    C --> C3[Verify Payment Completion Does Not Award Loyalty]
+    C --> C4[Verify Loyalty Award at Order COMPLETED]
 
     D --> D1[PayHere Sandbox Environment]
     D --> D2[Official PayHere Test Cards]
@@ -574,10 +590,11 @@ graph TD
 ### 2. Automated Integration Tests (Supertest)
 - Mock the external PayHere network boundary.
 - Deliver synthetic IPN payloads to `/api/v1/payments/notify`:
-  - Test valid completion: verifies `Payment` -> `completed`, `Order` -> `PROCESSING`, and loyalty trigger.
+  - Test valid payment completion: verifies `Payment` -> `completed`, `Order` -> `PROCESSING`, and no loyalty award yet.
   - Test duplicate IPN delivery: verifies HTTP 200 returned with zero duplicate side effects.
   - Test tampered amount/currency: verifies HTTP 400 rejection and security alert.
   - Test customer cancellation callback: verifies `Payment` -> `cancelled`, `Order` remains `ORDER_CREATED`.
+- Test approved Order completion separately: verifies the paid Order -> `COMPLETED` transition awards eligible loyalty points atomically and idempotently.
 
 ### 3. Sandbox End-to-End Testing
 - Staging and QA environments integrate directly with `sandbox.payhere.lk`.
@@ -593,7 +610,7 @@ graph TD
 - **Zero Card Data Liability**: SAQ A level PCI DSS scope reduction; OSMS avoids the compliance, liability, and infrastructure burden of handling sensitive cardholder credentials.
 - **State Integrity**: Decoupled `Payment` and `Order` lifecycles ensure clear, uncompromised audit trails without conflicting sources of truth.
 - **Financial Defense**: Cryptographic hash validation and backend amount authority eliminate client tampering risks.
-- **Strict Idempotency**: Resilient webhook processing protects against double charging and double loyalty point allocation.
+- **Strict Idempotency**: Resilient webhook processing protects against duplicate payment side effects, while the later Order-completion workflow independently protects against duplicate loyalty awards.
 - **Clean Scope**: Out-of-scope automated refund API complexity is avoided while preserving administrative status tracking for Management.
 
 ### Negative Consequences / Trade-offs
@@ -609,14 +626,14 @@ graph TD
 |---|---|---|
 | **SRS FR-004** | Shopping Cart & Checkout | Payment initiates after Order creation; backend amount authoritative. |
 | **SRS FR-009** | Secure Payment Gateway Processing | PayHere hosted gateway selected; MD5 signature IPN verification. |
-| **SRS FR-010** | Loyalty Points Updates | Loyalty points triggered only upon verified `Payment.status === 'completed'`. |
+| **SRS FR-010** | Loyalty Points Updates | Verified `Payment.status === 'completed'` moves the Order to `PROCESSING`; eligible loyalty points are awarded only when that paid Order later reaches `COMPLETED`. |
 | **SDS Section 4.3** | Checkout Sequence | Hosted redirect sequence with verified server-to-server callback. |
 | **SDS Section 5** | Data Model (`Order`, `Payment`) | Reuses current `Payment` model; adds currency and minimal metadata. |
 | **SDS Section 6.2** | RBAC Access Control Matrix | Management monitors transactions; Customers access own data only. |
 | **ADR-002** | Authoritative RBAC Model | RBAC enforcement on initiation, status retrieval, and reconciliation. |
 | **ADR-003** | Cart & Checkout Boundary | Payment begins after cart checkout establishes `ORDER_CREATED`. |
 | **ADR-004** | Order Lifecycle Model | Payment `completed` transitions Order from `ORDER_CREATED` to `PROCESSING`. |
-| **ADR-005** | Loyalty Calculation Model | Aligns earning trigger with verified payment and confirmed order. |
+| **ADR-005** | Loyalty Calculation Model | Requires both verified successful Payment and the paid Order reaching `COMPLETED`; payment completion alone does not award points. |
 
 ---
 
@@ -663,7 +680,7 @@ Implementation belongs strictly to downstream development issues:
 - [x] Expiry and late-success reconciliation safeguards defined.
 - [x] Order lifecycle coordination aligned with ADR-004.
 - [x] Checkout confirmation display boundary defined.
-- [x] Loyalty trigger boundary aligned with ADR-005.
+- [x] Loyalty trigger boundary aligned with ADR-005: payment completion moves the Order to `PROCESSING`, and Order `COMPLETED` triggers the atomic, idempotent award.
 - [x] Provider transaction ID (`providerTransactionId`) handling defined.
 - [x] Persisted metadata minimized; raw payload persistence prohibited.
 - [x] Refund scope defined (Manual/reconciliation only; automated API out of scope for Sprint 2).
@@ -686,3 +703,4 @@ Implementation belongs strictly to downstream development issues:
 | 2026-10-14 | Lead Architect | Approved | Validated against ADR-002, ADR-003, ADR-004, and ADR-005. Verified that secret management and safe logging rules satisfy project security baselines. |
 | 2026-10-14 | Client / Supervisor | Approved | Confirmed PayHere selection for Sri Lankan LKR transactions. Approved the decision to keep automated refund APIs out of Sprint 2 scope. ADR approved for Accepted status. |
 | Date not supplied | Development Team | Approved amendment | Same-Order payment retry is limited to the original unexpired 30-minute reservation. Genuine expiry cancels the unpaid Order; any later retry requires fresh checkout and a new Order. Approval evidence reference to be supplied before the documentation PR is submitted. |
+| Pending | — | Proposed / Pending approval | Corrects the loyalty lifecycle to award only when a verified-paid Order reaches `COMPLETED` and clarifies that proportional partial-refund reversal remains future approved work, consistent with ADR-005 and DDP-057. |
