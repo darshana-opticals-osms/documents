@@ -16,16 +16,15 @@ The Optical Shop Management System (OSMS) serves Darshana Opticals (Pvt) Ltd, ma
 
 Under **FR-012 (Comprehensive Sales / Inventory Reports)**, OSMS must provide management and authorized store personnel with reliable, timely, and secure operational and business intelligence reporting. 
 
-The approved Software Design Specification (SDS v1.0 Section 3.1 & 3.2 – *Access Control Matrix & Data Protection*) establishes the following foundational role assignments for reporting:
-- **Management**: FR-012 Owner (organization-wide business, financial, and analytical reporting oversight with customer PII masking).
-- **Inventory Manager**: FR-012 View (operational inventory levels, stock reorder alerts, and catalog status across branches).
-- **Branch Manager**: FR-012 View (branch-scoped sales performance, order counts, and localized inventory levels).
-- **Other Roles** (`BRANCH_ASSISTANT`, `OPTOMETRIST`, `CUSTOMER`): No FR-012 access.
+The approved Software Design Specification (SDS v1.0 Section 3.1 & 3.2 – *Access Control Matrix & Data Protection*) and **ADR-002 (Authoritative RBAC Role Model)** establish the following authoritative role assignments for reporting under the consolidated 5-role model:
+- **System Administrator (`SYSTEM_ADMIN`)**: FR-012 Owner (organization-wide business, financial, and analytical reporting oversight with customer PII masking).
+- **Branch Manager (`BRANCH_MANAGER`)**: FR-012 View (branch-scoped sales performance, order counts, and localized inventory levels).
+- **Other Roles** (`BRANCH_ASSISTANT`, `OPTOMETRIST`, `CUSTOMER`): No FR-012 access (HTTP 403 Forbidden).
 
 ### Existing Domain Decisions and Boundaries
 
 Reporting in OSMS aggregates data produced by previously accepted domain architectures:
-- **ADR-002 (Authoritative RBAC Role Model)**: Defines canonical roles (`MANAGEMENT`, `INVENTORY_MANAGER`, `BRANCH_MANAGER`, `BRANCH_ASSISTANT`, `OPTOMETRIST`, `CUSTOMER`) and least-privilege principles.
+- **ADR-002 (Authoritative RBAC Role Model)**: Establishes the authoritative 5-role model (`SYSTEM_ADMIN`, `BRANCH_MANAGER`, `OPTOMETRIST`, `BRANCH_ASSISTANT`, `CUSTOMER`), explicitly retiring fragmented roles (`MANAGEMENT`, `INVENTORY_MANAGER`, `SALES_ASSISTANT_CASHIER`) and consolidating system-wide reporting ownership under `SYSTEM_ADMIN` and localized branch operational reporting under `BRANCH_MANAGER`.
 - **ADR-003 (Shopping Cart Persistence & Checkout Boundary)**: Governs cart-to-order checkout boundaries and inventory reservation mechanics.
 - **ADR-004 (Order Lifecycle and Tracking Status Model)**: Defines canonical order states: `ORDER_CREATED`, `PROCESSING`, `READY_FOR_PICKUP`, `PICKED_UP`, `COMPLETED`, and `CANCELLED`.
 - **ADR-005 (Loyalty Points Calculation and Persistence Model)**: Governs customer loyalty point earning (1 point per LKR 100 on paid optical items) and redemption rules.
@@ -43,7 +42,7 @@ Although the underlying operational transactional entities exist or are defined,
 4. **Inventory Valuation Ambiguity**: Does "inventory value" mean retail selling value or wholesale cost, given the schema's available attributes?
 5. **Snapshot vs. Historical Inventory**: The current inventory document represents real-time state; historical movement logs do not currently exist as an immutable transaction ledger.
 6. **Privacy and PII Exposure**: Management reports require customer privacy protection, but the exact masking rules for sales aggregations remain undefined.
-7. **RBAC Scope Creep**: "View" access for Branch Managers and Inventory Managers must be constrained strictly to authorized branch boundaries and operational scopes to prevent financial or PII leakage.
+7. **RBAC Scope Creep**: "View" access for Branch Managers must be constrained strictly to authorized branch boundaries and operational scopes to prevent financial or PII leakage.
 
 Without a canonical ADR, independent backend endpoints and frontend dashboards will implement contradictory aggregation queries, resulting in fragmented metrics and audit failures.
 
@@ -54,7 +53,7 @@ Without a canonical ADR, independent backend endpoints and frontend dashboards w
 OSMS requires one authoritative, unified reporting specification that:
 - Establishes a mathematically deterministic definition of a "sale" and revenue recognition aligned with ADR-004 and ADR-011.
 - Provides closed formulas for all approved sales and inventory metrics, preventing duplicated or disparate calculations across frontend and backend.
-- Enforces strict role-based data isolation (RBAC), ensuring Branch Managers only access their assigned branch data and Inventory Managers only view operational inventory metrics without unapproved financial data.
+- Enforces strict role-based data isolation (RBAC), ensuring Branch Managers only access their assigned branch data and System Administrators hold organization-wide oversight with PII masking.
 - Guarantees customer privacy by masking Personally Identifiable Information (PII) and excluding clinical prescription data.
 - Accurately distinguishes current inventory snapshots from historical inventory movements within existing database schema boundaries.
 - Rejects unnecessary infrastructure complexity (no premature data warehouses, OLAP engines, or AI forecasting) in accordance with YAGNI and DRY principles.
@@ -67,7 +66,7 @@ All reporting metrics must derive exclusively from authoritative persistent doma
 
 | Domain Entity | Storage Collection | Key Available Fields Used in Reporting | Relevant Constraints / Notes |
 |---|---|---|---|
-| **Order** | `orders` | `_id`, `orderNumber`, `customerId`, `branchId`, `pickupBranchId`, `claimedBranchId`, `status`, `totalAmount`, `subtotal`, `discountAmount`, `createdAt`, `updatedAt` | Lifecycle states strictly governed by ADR-004. Orders support pickup branch selection (`pickupBranchId`). When claimed at `PROCESSING`, `branchId` is assigned and localized branch inventory is deducted. |
+| **Order** | `orders` | `_id`, `orderNumber`, `customerId`, `branchId`, `claimedBranchId`, `status`, `totalAmount`, `subtotal`, `discountAmount`, `createdAt`, `updatedAt` | Lifecycle states strictly governed by ADR-004. Online customer checkout creates unassigned online orders without customer pickup branch selection. When claimed for fulfillment at `PROCESSING`, `branchId` is assigned and localized branch inventory is deducted. |
 | **OrderItem** | Embedded in `orders.items` | `productId`, `productName`, `category`, `unitPrice`, `quantity`, `subtotal` | Linked directly to parent Order; represents purchased snapshot. |
 | **Payment** | `payments` | `_id`, `orderId`, `amount`, `currency`, `method`, `status`, `paidAt`, `refundedAt`, `refundAmount`, `createdAt` | Statuses governed by ADR-011 (`PENDING`, `COMPLETED`, `FAILED`, `REFUNDED`). |
 | **Inventory** | `inventories` | `_id`, `branchId`, `sku`, `name`, `category`, `brand`, `unitPrice`, `quantity`, `reorderThreshold`, `reorderStatus`, `updatedAt` | State governed by ADR-006 (`OK`, `LOW_STOCK`, `REORDER_TRIGGERED`). Represents current snapshot. |
@@ -158,7 +157,7 @@ The following deterministic metrics constitute the canonical sales reporting sco
 | **SM-04** | **Total Qualifying Orders Count** | `orders` JOIN `payments` | `payments.status == 'COMPLETED'` AND `orders.status IN ['PROCESSING', 'READY_FOR_PICKUP', 'PICKED_UP', 'COMPLETED']` | $\text{COUNT(DISTINCT orders.\_id)}$ | `orders.createdAt` | Total, Day, Week, Month, Branch, Order Status |
 | **SM-05** | **Average Order Value (AOV)** | Calculated from SM-01 & SM-04 | Same as SM-01 and SM-04 | $\frac{\text{SM-01 (Recognized Gross Revenue)}}{\text{SM-04 (Total Qualifying Orders Count)}}$ | `payments.paidAt` | Total, Day, Week, Month, Branch |
 | **SM-06** | **Items Sold Quantity** | `orders.items` JOIN `payments` | Same qualifying order/payment filter as SM-01 | $\sum (\text{order.items.quantity})$ | `payments.paidAt` | Total, Branch, Category, Product SKU |
-| **SM-07** | **Sales by Branch** | `orders` JOIN `payments` | Same as SM-01, grouped by fulfilling branch (`orders.branchId` / `orders.pickupBranchId`) | $\sum (\text{payments.amount}) \quad \text{per branchId}$ | `payments.paidAt` | Branch (including 'Unassigned / Online' for unclaimed online orders) |
+| **SM-07** | **Sales by Branch** | `orders` JOIN `payments` | Same as SM-01, grouped by fulfilling branch (`orders.branchId`) | $\sum (\text{payments.amount}) \quad \text{per branchId}$ | `payments.paidAt` | Branch (including 'Unassigned / Online' for online orders not yet claimed by a branch) |
 | **SM-08** | **Sales by Product Category** | `orders.items` JOIN `payments` | Same as SM-01, grouped by `item.category` | $\sum (\text{item.unitPrice} \times \text{item.quantity}) \quad \text{per category}$ | `payments.paidAt` | Category (`Frames`, `Lenses`, `Sunglasses`, `Accessories`) |
 | **SM-09** | **Payment Method Distribution** | `payments` JOIN `orders` | Same as SM-01, grouped by `payments.method` | Count & Volume per `payments.method` (`PAYHERE_CARD`, `CASH`, `BANK_TRANSFER`) | `payments.paidAt` | Payment Method |
 | **SM-10** | **Cancelled Orders Metric** | `orders` | `orders.status == 'CANCELLED'` | Count: $\text{COUNT(orders.\_id)}$<br>Value: $\sum (\text{orders.totalAmount})$ | `orders.updatedAt` | Total, Day, Month, Branch |
@@ -192,8 +191,8 @@ Inventory reports under FR-012 provide real-time visibility into branch stock le
 
 ### 9.3 Branch Inventory Deduction and Fulfillment Lifecycle Alignment
 In accordance with operational fulfillment rules established in Issue #56 and ADR-004:
-1. **Order Creation (`ORDER_CREATED`)**: Online checkout creates a global stock reservation. Localized branch inventory is not physically decremented at this draft/uncommitted stage.
-2. **Order Processing (`PROCESSING`)**: When authorized branch staff claim and initiate processing for an order, the fulfilling branch is authoritatively bound (`branchId`). The item quantities are physically deducted from the branch's localized `BranchInventory`, and reorder thresholds are re-evaluated under ADR-006.
+1. **Order Creation (`ORDER_CREATED`)**: Online checkout creates a global stock reservation. Customers place orders online without selecting a pickup branch; orders originate as unassigned online orders. Localized branch inventory is not physically decremented at this draft/uncommitted stage.
+2. **Order Processing (`PROCESSING`)**: When authorized branch staff claim and initiate processing for an order, the fulfilling branch is authoritatively bound (`branchId` / `claimedBranchId`). The item quantities are physically deducted from that fulfilling branch's localized `BranchInventory`, and reorder thresholds are re-evaluated under ADR-006.
 3. **Order Cancellation (`CANCELLED`)**: If an order in `PROCESSING` (or later) is subsequently cancelled, the physical branch inventory is automatically restored, ensuring current snapshot metrics (`IM-01` to `IM-06`) truthfully reflect stock on hand without manual intervention.
 
 ### 9.4 Inventory Valuation Semantics (AC12)
@@ -211,16 +210,16 @@ In strict adherence to **ADR-002 (Authoritative RBAC Role Model)** and the appro
 
 ### 10.1 Reporting Access Matrix
 
-| Dimension / Capability | `MANAGEMENT` (FR-012 Owner) | `INVENTORY_MANAGER` (FR-012 View) | `BRANCH_MANAGER` (FR-012 View) | Other Roles (`BRANCH_ASSISTANT`, `OPTOMETRIST`, `CUSTOMER`) |
-|---|---|---|---|---|
-| **Primary Scope** | Organization-wide (all branches) | Organization-wide (all branches) | Assigned Branch **Only** | **No Access** (HTTP 403) |
-| **Financial / Revenue Metrics** (SM-01 to SM-05, SM-09) | **Full Access** (Gross, Net, AOV, refunds, methods) | **Strictly Denied** (No revenue/financial metrics) | **Branch Sales Only** (Gross, Net, Orders for assigned branch) | **Strictly Denied** |
-| **Sales Operational Metrics** (SM-04, SM-06, SM-10) | **Full Access** (All branches, all order volumes) | **Strictly Denied** | **Branch Only** (Volumes, cancellations for assigned branch) | **Strictly Denied** |
-| **Inventory Snapshot Metrics** (IM-01 to IM-06) | **Full Access** (All branches, all categories, total retail value) | **Full Access** (All branches, units, reorder alerts, categories) | **Assigned Branch Only** (Branch stock units, local reorder alerts) | **Strictly Denied** |
-| **Branch Filter Option** | Can select any branch or `ALL` | Fixed to `ALL` for inventory queries | Fixed strictly to `req.user.branchId`; cannot override | N/A |
-| **Customer PII Visibility** | **Masked Only** (Name, email, phone masked) | **Zero Access** (No customer data returned) | **Masked Only** (Local customer orders; masked) | N/A |
-| **Clinical Prescription Data** | **Strictly Excluded** (Prescriptions never returned) | **Strictly Excluded** | **Strictly Excluded** | N/A |
-| **Export Permissions** | CSV & Multi-sheet Excel (.xlsx) export permitted (Org-wide, masked PII, separate branch tabs) | CSV & Excel (.xlsx) export permitted (Inventory only, zero PII) | CSV & Excel (.xlsx) export permitted (Assigned branch only, masked PII) | **Strictly Denied** |
+| Dimension / Capability | `SYSTEM_ADMIN` (FR-012 Owner) | `BRANCH_MANAGER` (FR-012 View) | Other Roles (`BRANCH_ASSISTANT`, `OPTOMETRIST`, `CUSTOMER`) |
+|---|---|---|---|
+| **Primary Scope** | Organization-wide (all branches) | Assigned Branch **Only** | **No Access** (HTTP 403) |
+| **Financial / Revenue Metrics** (SM-01 to SM-05, SM-09) | **Full Access** (Gross, Net, AOV, refunds, methods) | **Branch Sales Only** (Gross, Net, Orders for assigned branch) | **Strictly Denied** |
+| **Sales Operational Metrics** (SM-04, SM-06, SM-10) | **Full Access** (All branches, all order volumes) | **Branch Only** (Volumes, cancellations for assigned branch) | **Strictly Denied** |
+| **Inventory Snapshot Metrics** (IM-01 to IM-06) | **Full Access** (All branches, all categories, total retail value) | **Assigned Branch Only** (Branch stock units, local reorder alerts) | **Strictly Denied** |
+| **Branch Filter Option** | Can select any branch or `ALL` | Fixed strictly to `req.user.branchId`; cannot override | N/A |
+| **Customer PII Visibility** | **Masked Only** (Name, email, phone masked) | **Masked Only** (Local customer orders; masked) | N/A |
+| **Clinical Prescription Data** | **Strictly Excluded** (Prescriptions never returned) | **Strictly Excluded** | **Strictly Denied** |
+| **Export Permissions** | CSV & Multi-sheet Excel (.xlsx) export permitted (Org-wide, masked PII, separate branch tabs) | CSV & Excel (.xlsx) export permitted (Assigned branch only, masked PII) | **Strictly Denied** |
 
 ### 10.2 Role Scope Invariants
 
@@ -228,14 +227,10 @@ In strict adherence to **ADR-002 (Authoritative RBAC Role Model)** and the appro
   - Branch Managers possess `FR-012 View` access solely for their assigned retail outlet (`req.user.branchId`).
   - The backend reporting service **must inject** `branchId = req.user.branchId` into all database aggregation pipelines for Branch Managers.
   - A Branch Manager attempting to query data for another branch receives **HTTP 403 Forbidden**.
-- **Inventory Manager Scope Isolation (AC15)**:
-  - The Inventory Manager role oversees stock fulfillment across all branches and warehouse storage.
-  - They have access to metrics `IM-01` through `IM-06` organization-wide.
-  - To preserve the Principle of Least Privilege, the Inventory Manager receives **zero access** to revenue reports, financial totals, customer order lists, or payment distributions.
-- **Management Oversight Scope (AC16)**:
-  - Management holds organizational accountability for overall business performance and financial health.
+- **System Administrator Oversight Scope (AC16)**:
+  - System Administrators hold organizational accountability for overall business performance and financial health across Darshana Opticals.
   - They have access to all sales and inventory metrics across all branches.
-  - Owner status **does not grant** an exemption from data minimization: Management reports enforce automated customer PII masking.
+  - Administrator status **does not grant** an exemption from data minimization: System Administrator reports enforce automated customer PII masking.
 - **Unauthorized Role Handling (AC18)**:
   - Any request from roles without FR-012 rights (`BRANCH_ASSISTANT`, `OPTOMETRIST`, `CUSTOMER`) is rejected at the API middleware layer with `403 Forbidden`.
   - Frontend navigation bars must hide reporting tabs, and the backend must enforce authorization independently of the UI.
@@ -251,7 +246,7 @@ In accordance with SDS Section 3.2 (*Data Protection Approach*) and privacy-by-d
 - Individual customer records and transaction rows are not transferred to the client unless an authorized user explicitly navigates to an approved paginated detail table.
 
 ### 11.2 Customer PII Masking Algorithms (AC19)
-When customer details are presented in detailed order breakdown tables for Management or Branch Managers, all Personally Identifiable Information (PII) must be masked at the backend transformation layer:
+When customer details are presented in detailed order breakdown tables for System Administrators or Branch Managers, all Personally Identifiable Information (PII) must be masked at the backend transformation layer:
 
 | PII Field | Original Sample | Deterministic Masked Output | Masking Rule |
 |---|---|---|---|
@@ -263,7 +258,7 @@ When customer details are presented in detailed order breakdown tables for Manag
 *Rule*: Raw unmasked customer records are never returned in reporting API payloads.
 
 ### 11.3 Customer-Level Drilldown Boundary (AC21)
-- **Authorized Roles**: `MANAGEMENT` and `BRANCH_MANAGER` (scoped to assigned branch).
+- **Authorized Roles**: `SYSTEM_ADMIN` and `BRANCH_MANAGER` (scoped to assigned branch).
 - **Purpose**: Operational order reconciliation (e.g., verifying an anomalous order line item).
 - **Boundary**:
   - Drilldown endpoints require an explicit, bounded query (e.g., `?orderId=...` or paginated `page=1&limit=20`).
@@ -351,7 +346,7 @@ Under Issue #56, reporting exports support two canonical, secure formats:
    - **MIME Type**: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
    - **Generation Engine**: Server-side workbook generation powered by `exceljs`.
    - **Multi-sheet Structure**:
-     - For `MANAGEMENT` (organization-wide export), the workbook generates structured tabs:
+     - For `SYSTEM_ADMIN` (organization-wide export), the workbook generates structured tabs:
        - `Executive Summary`: High-level gross/net revenue, order volume, AOV, and top metrics.
        - `Branch Breakdowns`: Tabular breakdown per branch isolating regional sales performance.
        - `Inventory Snapshot`: Real-time stock levels, reorder alerts, and retail valuation.
@@ -433,7 +428,7 @@ All reporting endpoints must validate incoming query parameters using strict sch
 
 ### 16.4 Loyalty Reporting Boundary (AC37)
 - Loyalty point transactions are governed by **ADR-005**.
-- In Management analytical reporting, loyalty metrics are restricted to aggregated summary points:
+- In System Administrator analytical reporting, loyalty metrics are restricted to aggregated summary points:
   - `Total Loyalty Points Issued`
   - `Total Loyalty Points Redeemed`
 - Customer loyalty account balances are excluded from general sales reports to protect customer account privacy.
@@ -443,7 +438,7 @@ All reporting endpoints must validate incoming query parameters using strict sch
 - Payment gateway secrets, raw PayHere token hashes, and internal card masking hashes are excluded from reporting DTOs.
 
 ### 16.6 Branch Inventory Deduction and Order Claiming Alignment
-- **Fulfillment Claim**: When an order transitions from `ORDER_CREATED` to `PROCESSING`, the fulfilling branch claims the order. This ensures sales attribution in SM-07 aligns with the physical branch fulfilling the goods.
+- **Fulfillment Claim**: When an online order transitions from `ORDER_CREATED` to `PROCESSING`, the fulfilling branch claims the order. This ensures sales attribution in SM-07 aligns with the physical branch fulfilling the goods without requiring customer pickup branch selection.
 - **Inventory Synchronization**: Branch stock quantities are decremented upon entering `PROCESSING`. If the order is cancelled, stock is restored. This lifecycle guarantees that inventory reports (`IM-01` to `IM-06`) reflect true physical stock on hand.
 
 ---
@@ -461,7 +456,7 @@ The backend reporting service (`/api/v1/reports`) holds authoritative ownership 
 ### 17.2 Frontend Dashboard Responsibilities (AC47)
 The React reporting dashboard holds ownership of:
 1. **Visual Presentation**: Rendering KPI summary cards, time-series charts, and data tables.
-2. **Filter Controls**: Providing intuitive date-range pickers and branch drop-downs (for Management).
+2. **Filter Controls**: Providing intuitive date-range pickers and branch drop-downs (for System Administrators).
 3. **Display Formatting**: Formatting numbers as currency (`LKR`), formatting timestamps to local display strings.
 4. **Zero Independent Arithmetic**: The frontend must **never** recalculate revenue totals or sums by iterating over table rows. It displays the authoritative totals emitted by the backend.
 
@@ -475,7 +470,7 @@ The React reporting dashboard holds ownership of:
 
 ### 18.1 Positive Consequences
 - **Single Source of Truth**: Provides mathematically deterministic definitions for all sales and inventory metrics, preventing divergent calculations across features.
-- **Rich Multi-Sheet Reporting**: Management receives consolidated Excel (.xlsx) workbooks segmented into distinct operational worksheets, streamlining multi-branch executive reviews without manual aggregation.
+- **Rich Multi-Sheet Reporting**: System Administrators receive consolidated Excel (.xlsx) workbooks segmented into distinct operational worksheets, streamlining multi-branch executive reviews without manual aggregation.
 - **Accurate Branch Operational Alignment**: Order claiming at `PROCESSING` and automatic inventory deduction/restoration ensure branch sales attribution and stock levels remain completely synchronized.
 - **Enterprise RBAC Compliance**: Strictly isolates branch data for Branch Managers and keeps operational inventory free of unauthorized financial leaks.
 - **Privacy by Design**: Protects customer PII through deterministic masking and completely shields clinical prescription records from business dashboards.
@@ -510,4 +505,4 @@ The React reporting dashboard holds ownership of:
 | 2026-10-17 | Senior Full Stack Architect | Author / Technical Lead | Initial architectural specification satisfying all AC1–AC48 requirements for Issue #21. |
 | 2026-10-17 | OSMS Engineering Team | Peer Reviewers | Architecture peer review passed. Sales definition, payment-basis revenue recognition, inventory snapshot boundary, RBAC matrix, and PII masking approved. |
 | 2026-10-17 | Project Supervisor & Stakeholders | Approvers | Accepted. Canonical reporting definitions, branch scope isolation, clinical data exclusion, and CSV export scope formally confirmed. |
-| 2026-10-18 | Senior Full Stack Architect | Author / Technical Lead | Updated ADR-014 following backend implementation of Issue #56: added multi-sheet Excel (.xlsx) export specification, branch claiming & pickup branch sales attribution, and branch inventory deduction upon PROCESSING with cancellation stock restoration. |
+| 2026-10-18 | Senior Full Stack Architect | Author / Technical Lead | Updated ADR-014 following backend implementation of Issue #56: aligned roles strictly with ADR-002 5-role model (retired INVENTORY_MANAGER/MANAGEMENT in favor of SYSTEM_ADMIN & BRANCH_MANAGER), removed customer pickup branch assumptions, added multi-sheet Excel (.xlsx) export specification, and formalized branch order claiming with inventory deduction at PROCESSING and restoration at CANCELLED. |
