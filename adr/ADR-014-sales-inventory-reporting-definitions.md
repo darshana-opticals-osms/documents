@@ -66,7 +66,7 @@ All reporting metrics must derive exclusively from authoritative persistent doma
 
 | Domain Entity | Storage Collection | Key Available Fields Used in Reporting | Relevant Constraints / Notes |
 |---|---|---|---|
-| **Order** | `orders` | `_id`, `orderNumber`, `customerId`, `branchId`, `claimedBranchId`, `status`, `totalAmount`, `subtotal`, `discountAmount`, `createdAt`, `updatedAt` | Lifecycle states strictly governed by ADR-004. Online customer checkout creates unassigned online orders without customer pickup branch selection. When claimed for fulfillment at `PROCESSING`, `branchId` is assigned and localized branch inventory is deducted. |
+| **Order** | `orders` | `_id`, `orderNumber`, `customerId`, `branchId`, `claimedBranchId`, `status`, `totalAmount`, `subtotal`, `discountAmount`, `createdAt`, `updatedAt` | Lifecycle states strictly governed by ADR-004. Online customer checkout creates unassigned online orders without customer pickup branch selection, reserving physical stock from the selected branch inventory. When claimed for fulfillment at `PROCESSING`, `branchId` is assigned, consuming the existing reservation without duplicate deduction. |
 | **OrderItem** | Embedded in `orders.items` | `productId`, `productName`, `category`, `unitPrice`, `quantity`, `subtotal` | Linked directly to parent Order; represents purchased snapshot. |
 | **Payment** | `payments` | `_id`, `orderId`, `amount`, `currency`, `method`, `status`, `paidAt`, `refundedAt`, `refundAmount`, `createdAt` | Statuses governed by ADR-011 (`PENDING`, `COMPLETED`, `FAILED`, `REFUNDED`). |
 | **Inventory** | `inventories` | `_id`, `branchId`, `sku`, `name`, `category`, `brand`, `unitPrice`, `quantity`, `reorderThreshold`, `reorderStatus`, `updatedAt` | State governed by ADR-006 (`OK`, `LOW_STOCK`, `REORDER_TRIGGERED`). Represents current snapshot. |
@@ -99,7 +99,7 @@ In an optical retail environment, orders may exist in draft or pending payment s
   - `Cancelled Orders Value`: Sum of `totalAmount` for cancelled orders.
 - If an order is cancelled prior to payment capture (e.g., checkout timeout), it produces zero recognized financial impact.
 - If an order is cancelled after payment capture (exception flow), it triggers a refund workflow and is reconciled via the refund policy below.
-- **Physical Inventory Restoration Hook**: When an order is transitioned to `CANCELLED`, if localized branch inventory was previously deducted (i.e. order had reached `PROCESSING` or later), the deducted item quantities are atomically restored back to that fulfilling branch's `BranchInventory` and its reorder alert status is reconciled via ADR-006.
+- **Physical Inventory Restoration Hook**: When an order is transitioned to `CANCELLED`, if localized branch inventory was reserved or deducted (at checkout or fulfillment), the item quantities are atomically restored back to that source branch's `BranchInventory` and its reorder alert status is reconciled via ADR-006. Unclaimed orders are restored to their source reservation branch, while claimed orders restore to the fulfilling branch.
 
 #### B. Failed and Abandoned Payments (AC4)
 - Payment attempts with `Payment.status IN ['FAILED', 'PENDING']` are **completely excluded** from all sales metrics and revenue aggregations.
@@ -189,11 +189,16 @@ Inventory reports under FR-012 provide real-time visibility into branch stock le
   - **Identified Architectural Data Gap**: Historical stock movements (goods received notes, breakages, stock adjustments, internal branch transfers) require a dedicated `inventory_transactions` or `stock_movement_ledger` collection, which is outside the current Sprint 1/2 database schema.
   - **Sprint 2 Reporting Scope**: FR-012 is authoritatively defined as a **Current Inventory Snapshot Report**. Historical inventory trends are explicitly deferred to a future enhancement issue once an immutable inventory ledger is provisioned.
 
-### 9.3 Branch Inventory Deduction and Fulfillment Lifecycle Alignment
-In accordance with operational fulfillment rules established in Issue #56 and ADR-004:
-1. **Order Creation (`ORDER_CREATED`)**: Online checkout creates a global stock reservation. Customers place orders online without selecting a pickup branch; orders originate as unassigned online orders. Localized branch inventory is not physically decremented at this draft/uncommitted stage.
-2. **Order Processing (`PROCESSING`)**: When authorized branch staff claim and initiate processing for an order, the fulfilling branch is authoritatively bound (`branchId` / `claimedBranchId`). The item quantities are physically deducted from that fulfilling branch's localized `BranchInventory`, and reorder thresholds are re-evaluated under ADR-006.
-3. **Order Cancellation (`CANCELLED`)**: If an order in `PROCESSING` (or later) is subsequently cancelled, the physical branch inventory is automatically restored, ensuring current snapshot metrics (`IM-01` to `IM-06`) truthfully reflect stock on hand without manual intervention.
+### 9.3 Branch Inventory Deduction, Checkout Reservation, and Fulfillment Lifecycle Alignment
+In accordance with operational fulfillment rules established in Issue #56, ADR-003, ADR-004, and ADR-011:
+1. **Checkout Stock Reservation (`POST /api/checkout`)**: Online checkout creates the Order in `ORDER_CREATED` state and immediately decrements the physical stock of the selected branch inventory record as an authoritative reservation within a MongoDB transaction. Customers place orders online without selecting a pickup branch; order items originate from their localized branch stock. Reserving and decrementing inventory directly at checkout guarantees stock availability and prevents concurrent overselling while online payment is pending.
+2. **Payment Verification & Central Queue (`PROCESSING`, Unclaimed)**: Upon receipt of a verified payment notification from the PayHere IPN (`POST /api/payments/payhere/ipn`), the Order transitions automatically to `PROCESSING` with `branchId: null` per ADR-011. The Order enters the centralized online fulfillment queue in an unclaimed state. No secondary stock deduction occurs at this boundary since the physical reservation was established at checkout.
+3. **Branch Claiming (`PATCH /api/orders/:id/claim`)**: Authorized staff from the branch where the stock was reserved claim the Order for fulfillment. Claiming authoritatively assigns `order.branchId` to the fulfilling branch and records `fulfilledInventoryId` on the OrderItems. Same-branch claiming consumes the existing checkout reservation without a duplicate physical stock deduction.
+4. **Order Cancellation (`CANCELLED`) & Stock Restoration**:
+   - **Unclaimed Cancellation**: If an unclaimed `PROCESSING` Order is cancelled, the reserved stock is safely restored back to the original source branch inventory record. Branch staff authorization is fail-closed: staff can only cancel unclaimed orders originating from their assigned branch (or by System Admin).
+   - **Claimed Cancellation**: If a claimed `PROCESSING` Order is cancelled, stock is restored back to the assigned branch inventory.
+   - Restoration is atomic, idempotent, and re-evaluates active reorder alerts under ADR-006, ensuring current snapshot metrics (`IM-01` to `IM-06`) truthfully reflect stock on hand without manual intervention.
+5. **Cross-Branch Fulfillment Limitation**: Cross-branch fulfillment (claiming inventory reserved from Branch A by Branch B) is intentionally unsupported in the current architecture due to localized branch inventory identities without a unified global SKU catalog. Claiming attempts across branch boundaries fail closed with `409 UNSUPPORTED_CROSS_BRANCH_ALLOCATION`.
 
 ### 9.4 Inventory Valuation Semantics (AC12)
 
@@ -437,9 +442,11 @@ All reporting endpoints must validate incoming query parameters using strict sch
 - Reporting consumes canonical states from **ADR-011** (`COMPLETED`, `REFUNDED`, `FAILED`).
 - Payment gateway secrets, raw PayHere token hashes, and internal card masking hashes are excluded from reporting DTOs.
 
-### 16.6 Branch Inventory Deduction and Order Claiming Alignment
-- **Fulfillment Claim**: When an online order transitions from `ORDER_CREATED` to `PROCESSING`, the fulfilling branch claims the order. This ensures sales attribution in SM-07 aligns with the physical branch fulfilling the goods without requiring customer pickup branch selection.
-- **Inventory Synchronization**: Branch stock quantities are decremented upon entering `PROCESSING`. If the order is cancelled, stock is restored. This lifecycle guarantees that inventory reports (`IM-01` to `IM-06`) reflect true physical stock on hand.
+### 16.6 Branch Inventory Reservation, Order Claiming, and Fulfillment Alignment
+- **Checkout Stock Reservation**: Stock is physically decremented/reserved at checkout (`ORDER_CREATED`) to eliminate race conditions and prevent overselling during payment processing.
+- **PayHere Verification & Unclaimed Queue**: Verified PayHere IPN transitions the Order to `PROCESSING` with `branchId: null`, placing it into the centralized unassigned queue.
+- **Fulfillment Claim**: Authorized branch staff explicitly claim the order via `/api/orders/:id/claim`. Same-branch claiming assigns `order.branchId` and consumes the checkout reservation without double-deduction. Cross-branch fulfillment is intentionally unsupported and fails closed with `409 Conflict`.
+- **Inventory Restoration on Cancellation**: Cancelling either an unclaimed or claimed `PROCESSING` Order atomically restores the deducted inventory back to the source branch record. Unclaimed cancellation by branch staff requires that the reserved items originate from their assigned branch. This lifecycle guarantees that inventory reports (`IM-01` to `IM-06`) reflect true physical stock on hand.
 
 ---
 
@@ -471,7 +478,7 @@ The React reporting dashboard holds ownership of:
 ### 18.1 Positive Consequences
 - **Single Source of Truth**: Provides mathematically deterministic definitions for all sales and inventory metrics, preventing divergent calculations across features.
 - **Rich Multi-Sheet Reporting**: System Administrators receive consolidated Excel (.xlsx) workbooks segmented into distinct operational worksheets, streamlining multi-branch executive reviews without manual aggregation.
-- **Accurate Branch Operational Alignment**: Order claiming at `PROCESSING` and automatic inventory deduction/restoration ensure branch sales attribution and stock levels remain completely synchronized.
+- **Accurate Branch Operational Alignment**: Checkout-time stock reservation, order claiming at `PROCESSING`, and automatic inventory restoration on cancellation ensure branch sales attribution and stock levels remain completely synchronized.
 - **Enterprise RBAC Compliance**: Strictly isolates branch data for Branch Managers and keeps operational inventory free of unauthorized financial leaks.
 - **Privacy by Design**: Protects customer PII through deterministic masking and completely shields clinical prescription records from business dashboards.
 - **Pragmatic Architecture (YAGNI)**: Eliminates premature infrastructure complexity by leveraging MongoDB's indexed aggregation pipelines rather than spinning up expensive external OLAP systems.
@@ -506,3 +513,4 @@ The React reporting dashboard holds ownership of:
 | 2026-10-17 | OSMS Engineering Team | Peer Reviewers | Architecture peer review passed. Sales definition, payment-basis revenue recognition, inventory snapshot boundary, RBAC matrix, and PII masking approved. |
 | 2026-10-17 | Project Supervisor & Stakeholders | Approvers | Accepted. Canonical reporting definitions, branch scope isolation, clinical data exclusion, and CSV export scope formally confirmed. |
 | 2026-10-18 | Senior Full Stack Architect | Author / Technical Lead | Updated ADR-014 following backend implementation of Issue #56: aligned roles strictly with ADR-002 5-role model (retired INVENTORY_MANAGER/MANAGEMENT in favor of SYSTEM_ADMIN & BRANCH_MANAGER), removed customer pickup branch assumptions, added multi-sheet Excel (.xlsx) export specification, and formalized branch order claiming with inventory deduction at PROCESSING and restoration at CANCELLED. |
+| 2026-10-18 | Senior Full Stack Architect | Author / Technical Lead | Reconciled ADR-014 §9.3 & §16.6 with implemented checkout and fulfillment lifecycle: clarified checkout-time stock reservation, verified PayHere IPN transition to PROCESSING, consumption of reservation upon branch claim, claimed & unclaimed cancellation restoration, and documented the current scope limitation on cross-branch fulfillment. |
