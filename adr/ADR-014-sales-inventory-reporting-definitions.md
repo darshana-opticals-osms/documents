@@ -67,7 +67,7 @@ All reporting metrics must derive exclusively from authoritative persistent doma
 
 | Domain Entity | Storage Collection | Key Available Fields Used in Reporting | Relevant Constraints / Notes |
 |---|---|---|---|
-| **Order** | `orders` | `_id`, `orderNumber`, `customerId`, `branchId`, `status`, `totalAmount`, `subtotal`, `discountAmount`, `createdAt`, `updatedAt` | Lifecycle states strictly governed by ADR-004. |
+| **Order** | `orders` | `_id`, `orderNumber`, `customerId`, `branchId`, `pickupBranchId`, `claimedBranchId`, `status`, `totalAmount`, `subtotal`, `discountAmount`, `createdAt`, `updatedAt` | Lifecycle states strictly governed by ADR-004. Orders support pickup branch selection (`pickupBranchId`). When claimed at `PROCESSING`, `branchId` is assigned and localized branch inventory is deducted. |
 | **OrderItem** | Embedded in `orders.items` | `productId`, `productName`, `category`, `unitPrice`, `quantity`, `subtotal` | Linked directly to parent Order; represents purchased snapshot. |
 | **Payment** | `payments` | `_id`, `orderId`, `amount`, `currency`, `method`, `status`, `paidAt`, `refundedAt`, `refundAmount`, `createdAt` | Statuses governed by ADR-011 (`PENDING`, `COMPLETED`, `FAILED`, `REFUNDED`). |
 | **Inventory** | `inventories` | `_id`, `branchId`, `sku`, `name`, `category`, `brand`, `unitPrice`, `quantity`, `reorderThreshold`, `reorderStatus`, `updatedAt` | State governed by ADR-006 (`OK`, `LOW_STOCK`, `REORDER_TRIGGERED`). Represents current snapshot. |
@@ -100,6 +100,7 @@ In an optical retail environment, orders may exist in draft or pending payment s
   - `Cancelled Orders Value`: Sum of `totalAmount` for cancelled orders.
 - If an order is cancelled prior to payment capture (e.g., checkout timeout), it produces zero recognized financial impact.
 - If an order is cancelled after payment capture (exception flow), it triggers a refund workflow and is reconciled via the refund policy below.
+- **Physical Inventory Restoration Hook**: When an order is transitioned to `CANCELLED`, if localized branch inventory was previously deducted (i.e. order had reached `PROCESSING` or later), the deducted item quantities are atomically restored back to that fulfilling branch's `BranchInventory` and its reorder alert status is reconciled via ADR-006.
 
 #### B. Failed and Abandoned Payments (AC4)
 - Payment attempts with `Payment.status IN ['FAILED', 'PENDING']` are **completely excluded** from all sales metrics and revenue aggregations.
@@ -157,7 +158,7 @@ The following deterministic metrics constitute the canonical sales reporting sco
 | **SM-04** | **Total Qualifying Orders Count** | `orders` JOIN `payments` | `payments.status == 'COMPLETED'` AND `orders.status IN ['PROCESSING', 'READY_FOR_PICKUP', 'PICKED_UP', 'COMPLETED']` | $\text{COUNT(DISTINCT orders.\_id)}$ | `orders.createdAt` | Total, Day, Week, Month, Branch, Order Status |
 | **SM-05** | **Average Order Value (AOV)** | Calculated from SM-01 & SM-04 | Same as SM-01 and SM-04 | $\frac{\text{SM-01 (Recognized Gross Revenue)}}{\text{SM-04 (Total Qualifying Orders Count)}}$ | `payments.paidAt` | Total, Day, Week, Month, Branch |
 | **SM-06** | **Items Sold Quantity** | `orders.items` JOIN `payments` | Same qualifying order/payment filter as SM-01 | $\sum (\text{order.items.quantity})$ | `payments.paidAt` | Total, Branch, Category, Product SKU |
-| **SM-07** | **Sales by Branch** | `orders` JOIN `payments` | Same as SM-01, grouped by `orders.branchId` | $\sum (\text{payments.amount}) \quad \text{per branchId}$ | `payments.paidAt` | Branch |
+| **SM-07** | **Sales by Branch** | `orders` JOIN `payments` | Same as SM-01, grouped by fulfilling branch (`orders.branchId` / `orders.pickupBranchId`) | $\sum (\text{payments.amount}) \quad \text{per branchId}$ | `payments.paidAt` | Branch (including 'Unassigned / Online' for unclaimed online orders) |
 | **SM-08** | **Sales by Product Category** | `orders.items` JOIN `payments` | Same as SM-01, grouped by `item.category` | $\sum (\text{item.unitPrice} \times \text{item.quantity}) \quad \text{per category}$ | `payments.paidAt` | Category (`Frames`, `Lenses`, `Sunglasses`, `Accessories`) |
 | **SM-09** | **Payment Method Distribution** | `payments` JOIN `orders` | Same as SM-01, grouped by `payments.method` | Count & Volume per `payments.method` (`PAYHERE_CARD`, `CASH`, `BANK_TRANSFER`) | `payments.paidAt` | Payment Method |
 | **SM-10** | **Cancelled Orders Metric** | `orders` | `orders.status == 'CANCELLED'` | Count: $\text{COUNT(orders.\_id)}$<br>Value: $\sum (\text{orders.totalAmount})$ | `orders.updatedAt` | Total, Day, Month, Branch |
@@ -189,7 +190,13 @@ Inventory reports under FR-012 provide real-time visibility into branch stock le
   - **Identified Architectural Data Gap**: Historical stock movements (goods received notes, breakages, stock adjustments, internal branch transfers) require a dedicated `inventory_transactions` or `stock_movement_ledger` collection, which is outside the current Sprint 1/2 database schema.
   - **Sprint 2 Reporting Scope**: FR-012 is authoritatively defined as a **Current Inventory Snapshot Report**. Historical inventory trends are explicitly deferred to a future enhancement issue once an immutable inventory ledger is provisioned.
 
-### 9.3 Inventory Valuation Semantics (AC12)
+### 9.3 Branch Inventory Deduction and Fulfillment Lifecycle Alignment
+In accordance with operational fulfillment rules established in Issue #56 and ADR-004:
+1. **Order Creation (`ORDER_CREATED`)**: Online checkout creates a global stock reservation. Localized branch inventory is not physically decremented at this draft/uncommitted stage.
+2. **Order Processing (`PROCESSING`)**: When authorized branch staff claim and initiate processing for an order, the fulfilling branch is authoritatively bound (`branchId`). The item quantities are physically deducted from the branch's localized `BranchInventory`, and reorder thresholds are re-evaluated under ADR-006.
+3. **Order Cancellation (`CANCELLED`)**: If an order in `PROCESSING` (or later) is subsequently cancelled, the physical branch inventory is automatically restored, ensuring current snapshot metrics (`IM-01` to `IM-06`) truthfully reflect stock on hand without manual intervention.
+
+### 9.4 Inventory Valuation Semantics (AC12)
 
 - **Valuation Standard**: Metric **IM-06** represents **Total Retail Selling Valuation** ($\sum \text{quantity} \times \text{unitSellingPrice}$).
 - **Wholesale Cost Limitation**: The current `inventories` schema does not capture supplier purchase cost (`costPrice`). To adhere to strict data truthfulness:
@@ -213,7 +220,7 @@ In strict adherence to **ADR-002 (Authoritative RBAC Role Model)** and the appro
 | **Branch Filter Option** | Can select any branch or `ALL` | Fixed to `ALL` for inventory queries | Fixed strictly to `req.user.branchId`; cannot override | N/A |
 | **Customer PII Visibility** | **Masked Only** (Name, email, phone masked) | **Zero Access** (No customer data returned) | **Masked Only** (Local customer orders; masked) | N/A |
 | **Clinical Prescription Data** | **Strictly Excluded** (Prescriptions never returned) | **Strictly Excluded** | **Strictly Excluded** | N/A |
-| **Export Permissions** | CSV export permitted (Org-wide, masked PII) | CSV export permitted (Inventory only, zero PII) | CSV export permitted (Assigned branch only, masked PII) | **Strictly Denied** |
+| **Export Permissions** | CSV & Multi-sheet Excel (.xlsx) export permitted (Org-wide, masked PII, separate branch tabs) | CSV & Excel (.xlsx) export permitted (Inventory only, zero PII) | CSV & Excel (.xlsx) export permitted (Assigned branch only, masked PII) | **Strictly Denied** |
 
 ### 10.2 Role Scope Invariants
 
@@ -332,18 +339,31 @@ In accordance with YAGNI (*You Aren't Gonna Need It*):
 
 ---
 
-## 14. Export Architecture and Privacy Boundary (AC29, AC30)
+## 14. Export Architecture, Formats, and Privacy Boundary (AC29, AC30)
 
-### 14.1 Approved Export Format
-- **Supported Format**: **CSV (Comma-Separated Values)**.
-- **Target Audience**: `MANAGEMENT` (organization-wide) and `BRANCH_MANAGER` (assigned branch only).
-- **Excluded Formats**: PDF report generation, Excel binary files (.xlsx), and print-view stylesheets are deferred to future enhancements to minimize dependency bloat.
+### 14.1 Approved Export Formats
+Under Issue #56, reporting exports support two canonical, secure formats:
+1. **CSV (Comma-Separated Values)**:
+   - **MIME Type**: `text/csv`.
+   - **Standard**: RFC-4180 compliant tabular export, streamed directly to prevent memory saturation.
+   - **Scope**: Single-table tabular representations for lightweight programmatic ingestion or spreadsheet viewing.
+2. **Multi-sheet Excel (.xlsx)**:
+   - **MIME Type**: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
+   - **Generation Engine**: Server-side workbook generation powered by `exceljs`.
+   - **Multi-sheet Structure**:
+     - For `MANAGEMENT` (organization-wide export), the workbook generates structured tabs:
+       - `Executive Summary`: High-level gross/net revenue, order volume, AOV, and top metrics.
+       - `Branch Breakdowns`: Tabular breakdown per branch isolating regional sales performance.
+       - `Inventory Snapshot`: Real-time stock levels, reorder alerts, and retail valuation.
+       - `Orders Breakdown`: Paginated order listings with masked customer PII.
+     - For `BRANCH_MANAGER`, the workbook is strictly scoped to their assigned branch data.
+- **Excluded Formats**: PDF report generation and browser print-view stylesheets remain deferred to avoid headless browser / canvas rendering dependencies.
 
-### 14.2 Export Privacy and Security Invariants (AC30)
-1. **Identical Masking**: Any exported CSV file containing order listings must apply the exact PII masking rules defined in Section 11.2.
-2. **Identical RBAC Filtering**: Branch Managers exporting CSVs only receive data for their assigned branch.
-3. **Clinical Immunity**: Exported CSV columns must never include clinical prescription fields.
-4. **Audit Logging**: Export generation events must emit an audit entry to the immutable audit log under ADR-012 (`REPORT_EXPORT_GENERATED`).
+### 14.2 Export Privacy, Security, and Auditing Invariants (AC30)
+1. **Identical Masking Across Formats**: Any exported file (whether CSV or Excel `.xlsx`) containing customer order listings must strictly apply the deterministic PII masking rules defined in Section 11.2.
+2. **Identical RBAC Filtering**: Branch Managers exporting CSV or Excel workbooks receive data exclusively for their assigned branch (`req.user.branchId`).
+3. **Clinical Immunity**: Exported columns in both CSV and Excel workbooks must never include clinical prescription fields.
+4. **Audit Logging**: Every export generation event (CSV or Excel) must emit an immutable audit entry under ADR-012 (`REPORT_EXPORT_GENERATED`) capturing `exportFormat`, `dateRange`, `branchScope`, and actor identity.
 
 ---
 
@@ -422,6 +442,10 @@ All reporting endpoints must validate incoming query parameters using strict sch
 - Reporting consumes canonical states from **ADR-011** (`COMPLETED`, `REFUNDED`, `FAILED`).
 - Payment gateway secrets, raw PayHere token hashes, and internal card masking hashes are excluded from reporting DTOs.
 
+### 16.6 Branch Inventory Deduction and Order Claiming Alignment
+- **Fulfillment Claim**: When an order transitions from `ORDER_CREATED` to `PROCESSING`, the fulfilling branch claims the order. This ensures sales attribution in SM-07 aligns with the physical branch fulfilling the goods.
+- **Inventory Synchronization**: Branch stock quantities are decremented upon entering `PROCESSING`. If the order is cancelled, stock is restored. This lifecycle guarantees that inventory reports (`IM-01` to `IM-06`) reflect true physical stock on hand.
+
 ---
 
 ## 17. Architectural Boundaries: Backend vs. Frontend Responsibilities (AC32, AC33, AC46, AC47, AC48)
@@ -451,6 +475,8 @@ The React reporting dashboard holds ownership of:
 
 ### 18.1 Positive Consequences
 - **Single Source of Truth**: Provides mathematically deterministic definitions for all sales and inventory metrics, preventing divergent calculations across features.
+- **Rich Multi-Sheet Reporting**: Management receives consolidated Excel (.xlsx) workbooks segmented into distinct operational worksheets, streamlining multi-branch executive reviews without manual aggregation.
+- **Accurate Branch Operational Alignment**: Order claiming at `PROCESSING` and automatic inventory deduction/restoration ensure branch sales attribution and stock levels remain completely synchronized.
 - **Enterprise RBAC Compliance**: Strictly isolates branch data for Branch Managers and keeps operational inventory free of unauthorized financial leaks.
 - **Privacy by Design**: Protects customer PII through deterministic masking and completely shields clinical prescription records from business dashboards.
 - **Pragmatic Architecture (YAGNI)**: Eliminates premature infrastructure complexity by leveraging MongoDB's indexed aggregation pipelines rather than spinning up expensive external OLAP systems.
@@ -484,3 +510,4 @@ The React reporting dashboard holds ownership of:
 | 2026-10-17 | Senior Full Stack Architect | Author / Technical Lead | Initial architectural specification satisfying all AC1–AC48 requirements for Issue #21. |
 | 2026-10-17 | OSMS Engineering Team | Peer Reviewers | Architecture peer review passed. Sales definition, payment-basis revenue recognition, inventory snapshot boundary, RBAC matrix, and PII masking approved. |
 | 2026-10-17 | Project Supervisor & Stakeholders | Approvers | Accepted. Canonical reporting definitions, branch scope isolation, clinical data exclusion, and CSV export scope formally confirmed. |
+| 2026-10-18 | Senior Full Stack Architect | Author / Technical Lead | Updated ADR-014 following backend implementation of Issue #56: added multi-sheet Excel (.xlsx) export specification, branch claiming & pickup branch sales attribution, and branch inventory deduction upon PROCESSING with cancellation stock restoration. |
