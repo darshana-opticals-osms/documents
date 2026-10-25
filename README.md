@@ -10,19 +10,21 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 
 | Document | Version | Path | Status |
 |----------|---------|------|--------|
+| Software Requirements Specification (SRS) | 1.1 | [`srs/srs-final.pdf`](srs/srs-final.pdf) | Review candidate |
 | Software Requirements Specification (SRS) | 1.0 | [`srs/srs-v1.0.pdf`](srs/srs-v1.0.pdf) | Approved |
 
 ### Design
 
 | Document | Version | Path | Status |
 |----------|---------|------|--------|
+| Software Design Specification (SDS) | 1.1 | [`SDS/sds-final.pdf`](SDS/sds-final.pdf) | Review candidate |
 | Software Design Specification (SDS) | 1.0 | [`SDS/sds-v1.0.pdf`](SDS/sds-v1.0.pdf) | Approved |
 
 ### Architectural Decision Records (ADRs)
 
 | ADR | Title | Path | Status |
 |-----|-------|------|--------|
-| ADR-001 | Clinical Prescription Data Storage Design | [`adr/ADR-001-clinical-prescription-storage.md`](adr/ADR-001-clinical-prescription-storage.md) | Proposed |
+| ADR-001 | Clinical Prescription Data Storage Design | [`adr/ADR-001-clinical-prescription-storage.md`](adr/ADR-001-clinical-prescription-storage.md) | Accepted |
 | ADR-002 | Authoritative RBAC Role Model | [`adr/ADR-002-rbac-role-model.md`](adr/ADR-002-rbac-role-model.md) | Accepted |
 | ADR-003 | Shopping Cart Persistence and Checkout Boundary | [`adr/ADR-003-shopping-cart-checkout-boundary.md`](adr/ADR-003-shopping-cart-checkout-boundary.md) | Accepted |
 | ADR-004 | Order Lifecycle and Tracking Status Model | [`adr/ADR-004-order-lifecycle-tracking.md`](adr/ADR-004-order-lifecycle-tracking.md) | Accepted |
@@ -36,6 +38,7 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 | ADR-012 | Authoritative Immutable Audit-Trail Architecture | [`adr/ADR-012-immutable-audit-trail-architecture.md`](adr/ADR-012-immutable-audit-trail-architecture.md) | Accepted |
 | ADR-013 | Authoritative Order-Status Notification Policy | [`adr/ADR-013-order-status-notification-policy.md`](adr/ADR-013-order-status-notification-policy.md) | Accepted |
 | ADR-014 | Authoritative Sales and Inventory Reporting Definitions, Metrics, and Access Policy | [`adr/ADR-014-sales-inventory-reporting-definitions.md`](adr/ADR-014-sales-inventory-reporting-definitions.md) | Accepted |
+| ADR-015 | Staging Backend Container Hosting Operational Fallback (Render.com) | [`adr/ADR-015-staging-backend-container-hosting-fallback.md`](adr/ADR-015-staging-backend-container-hosting-fallback.md) | Accepted |
 
 ### Development Standards
 
@@ -50,9 +53,11 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 ```text
 documents/
 ├── srs/
-│   └── srs-v1.0.pdf          # Approved SRS v1.0
+│   ├── srs-v1.0.pdf          # Approved SRS v1.0 baseline
+│   └── srs-final.pdf         # SRS v1.1 review candidate
 ├── SDS/
-│   └── sds-v1.0.pdf          # Approved SDS v1.0
+│   ├── sds-v1.0.pdf          # Approved SDS v1.0 baseline
+│   └── sds-final.pdf         # SDS v1.1 review candidate
 ├── adr/
 │   ├── ADR-001-clinical-prescription-storage.md
 │   ├── ADR-002-rbac-role-model.md
@@ -67,7 +72,10 @@ documents/
 │   ├── ADR-011-secure-payment-gateway-integration.md
 │   ├── ADR-012-immutable-audit-trail-architecture.md
 │   ├── ADR-013-order-status-notification-policy.md
-│   └── ADR-014-sales-inventory-reporting-definitions.md
+│   ├── ADR-014-sales-inventory-reporting-definitions.md
+│   └── ADR-015-staging-backend-container-hosting-fallback.md
+├── standards/
+│   └── coding-standards.md
 └── README.md
 ```
 
@@ -75,6 +83,7 @@ documents/
 
 ## Notes
 
-- Implementation decisions must remain traceable to the approved SRS and SDS.
-- Significant deviations from the approved SDS must be documented as an ADR before implementation.
-- The final implemented SRS will be maintained as `srs/srs-final.pdf` after project completion.
+- The approved SRS and SDS v1.0 documents remain the historical baselines.
+- The implementation-aligned SRS and SDS v1.1 documents are the current final review deliverables; they remain review candidates until approval evidence is recorded.
+- The accepted ADRs indexed above record approved design changes from the historical baselines.
+- Development work follows the [Coding and Code Review Standards](standards/coding-standards.md).
