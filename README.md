@@ -40,6 +40,17 @@ Project documentation repository for the **Optical Shop Management System (OSMS)
 | ADR-014 | Authoritative Sales and Inventory Reporting Definitions, Metrics, and Access Policy | [`adr/ADR-014-sales-inventory-reporting-definitions.md`](adr/ADR-014-sales-inventory-reporting-definitions.md) | Accepted |
 | ADR-015 | Staging Backend Container Hosting Operational Fallback (Render.com) | [`adr/ADR-015-staging-backend-container-hosting-fallback.md`](adr/ADR-015-staging-backend-container-hosting-fallback.md) | Accepted |
 
+### Testing and QA Evidence (DDP-087)
+
+| Document | Path | Status |
+|----------|------|--------|
+| Test Coverage Report | [`testing/coverage-sprint8.pdf`](testing/coverage-sprint8.pdf) | Review candidate — traceability completion requested |
+| Test Case Register | [`testing/test-register.pdf`](testing/test-register.pdf) | Review candidate — SRS mapping completion requested |
+| Performance and Reliability Report (DDP-086) | [`testing/performance-report.pdf`](testing/performance-report.pdf) | Supporting evidence |
+| OWASP Security Checklist (DDP-085) | [`security/owasp-checklist.pdf`](security/owasp-checklist.pdf) | Supporting evidence |
+
+The reports include measured local automated test outcomes. Complete SRS traceability, route-level API assessment, critical-logic branch coverage, CI links, and cross-repository verification evidence must be reviewed before final QA sign-off. Hosted PayHere verification is not established by the automated test totals.
+
 ### Development Standards
 
 | Document | Path | Status |
